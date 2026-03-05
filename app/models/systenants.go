@@ -3,7 +3,6 @@ package models
 import (
 	"context"
 	"gin-fast/app/global/app"
-
 	"gorm.io/gorm"
 )
 
@@ -18,6 +17,9 @@ type Tenant struct {
 	PlatformDomain string `gorm:"column:platform_domain;size:255;comment:平台基础域名(如:yourplatform.com)" json:"platformDomain"`
 	CreatedBy      uint   `gorm:"column:created_by;comment:创建人" json:"createdBy"`
 	MenuPermission string `gorm:"column:menu_permission;size:500;comment:菜单权限" json:"menuPermission"`
+	City           string `gorm:"column:city;size:20;not null;comment:城市" json:"city"`
+	WorkStartTime  string `gorm:"column:work_start_time;size:8;not null;comment:开始时间(HH:mm:ss)" json:"workStartTime"`
+	WorkEndTime    string `gorm:"column:work_end_time;size:8;not null;comment:结束时间(HH:mm:ss)" json:"workEndTime"`
 }
 
 // TableName 设置表名

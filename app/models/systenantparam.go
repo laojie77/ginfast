@@ -15,6 +15,9 @@ type SysTenantAddRequest struct {
 	Domain         string `form:"domain" json:"domain" validate:"required" message:"域名不能为空"`
 	PlatformDomain string `form:"platformDomain" json:"platformDomain"`
 	MenuPermission string `form:"menuPermission" json:"menuPermission"`
+	City           string `form:"city" json:"city" validate:"required" message:"城市不能为空"`
+	WorkStartTime  string `form:"workStartTime" json:"workStartTime" validate:"required|regex:^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$" message:"时间不能为空|时间格式必须为HH:mm:ss"`
+	WorkEndTime    string `form:"workEndTime" json:"workEndTime" validate:"required|regex:^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$" message:"时间不能为空|时间格式必须为HH:mm:ss"`
 }
 
 func (r *SysTenantAddRequest) Validate(c *gin.Context) error {
@@ -32,6 +35,9 @@ type SysTenantUpdateRequest struct {
 	Domain         string `form:"domain" json:"domain" validate:"required" message:"域名不能为空"`
 	PlatformDomain string `form:"platformDomain" json:"platformDomain"`
 	MenuPermission string `form:"menuPermission" json:"menuPermission"`
+	City           string `form:"city" json:"city" validate:"required" message:"城市不能为空"`
+	WorkStartTime  string `form:"workStartTime" json:"workStartTime" validate:"required" message:"时间不能为空"`
+	WorkEndTime    string `form:"workEndTime" json:"workEndTime" validate:"required" message:"时间不能为空"`
 }
 
 func (r *SysTenantUpdateRequest) Validate(c *gin.Context) error {
