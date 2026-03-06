@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"gin-fast/app/global/app"
 	"gin-fast/app/models"
 	"gin-fast/app/utils/common"
@@ -92,6 +93,7 @@ func recordOperationLog(c *gin.Context, startTime time.Time, requestBody, respon
 
 	// 尝试从JWT token获取用户信息
 	claims := common.GetClaims(c)
+	fmt.Printf("Claims 内容: %+v\n", claims)
 	if claims != nil {
 		userID = claims.UserID
 		username = claims.Username

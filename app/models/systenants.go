@@ -18,8 +18,11 @@ type Tenant struct {
 	CreatedBy      uint   `gorm:"column:created_by;comment:创建人" json:"createdBy"`
 	MenuPermission string `gorm:"column:menu_permission;size:500;comment:菜单权限" json:"menuPermission"`
 	City           string `gorm:"column:city;size:20;not null;comment:城市" json:"city"`
-	WorkStartTime  string `gorm:"column:work_start_time;size:8;not null;comment:开始时间(HH:mm:ss)" json:"workStartTime"`
-	WorkEndTime    string `gorm:"column:work_end_time;size:8;not null;comment:结束时间(HH:mm:ss)" json:"workEndTime"`
+	WorkStartTime  string `gorm:"column:work_start_time;size:8;comment:开始时间" json:"workStartTime"`
+	WorkEndTime    string `gorm:"column:work_end_time;size:8;comment:结束时间" json:"workEndTime"`
+	SmsStatus      int8   `gorm:"column:sms_status;default:0;comment:短信状态 0停用 1启用" json:"smsStatus"`
+	IsPublic       int8   `gorm:"column:is_public;default:1;comment:公共池回收 0否 1是" json:"isPublic"`
+	IsRepeatNeed   int8   `gorm:"column:is_repeat_need;default:1;comment:是否重复进入 0否 1是" json:"isRepeatNeed"`
 }
 
 // TableName 设置表名

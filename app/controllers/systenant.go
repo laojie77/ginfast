@@ -160,6 +160,12 @@ func (tc *TenantController) Add(c *gin.Context) {
 	tenant.Domain = req.Domain
 	tenant.PlatformDomain = req.PlatformDomain
 	tenant.MenuPermission = req.MenuPermission
+	tenant.City = req.City
+	tenant.WorkStartTime = req.WorkStartTime
+	tenant.WorkEndTime = req.WorkEndTime
+	tenant.SmsStatus = req.SmsStatus
+	tenant.IsPublic = req.IsPublic
+	tenant.IsRepeatNeed = req.IsRepeatNeed
 
 	err = app.DB().WithContext(c).Create(tenant).Error
 	if err != nil {
@@ -245,6 +251,12 @@ func (tc *TenantController) Update(c *gin.Context) {
 	tenant.Domain = req.Domain
 	tenant.PlatformDomain = req.PlatformDomain
 	tenant.MenuPermission = req.MenuPermission
+	tenant.City = req.City
+	tenant.WorkStartTime = req.WorkStartTime
+	tenant.WorkEndTime = req.WorkEndTime
+	tenant.SmsStatus = req.SmsStatus
+	tenant.IsPublic = req.IsPublic
+	tenant.IsRepeatNeed = req.IsRepeatNeed
 
 	err = app.DB().WithContext(c).Save(tenant).Error
 	if err != nil {

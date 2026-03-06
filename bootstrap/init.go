@@ -5,6 +5,7 @@ import (
 	"gin-fast/app/global/app"
 	"gin-fast/app/global/consts"
 	"gin-fast/app/global/myerrors"
+	"gin-fast/app/models"
 	"gin-fast/app/scheduler"
 	"gin-fast/app/service"
 	"gin-fast/app/utils/cachehelper"
@@ -15,6 +16,7 @@ import (
 	"gin-fast/app/utils/tokenhelper"
 	"gin-fast/app/utils/uploadhelper"
 	"gin-fast/app/utils/ymlconfig"
+	"gorm.io/gorm"
 	"log"
 	"os"
 	"strings"
@@ -79,6 +81,8 @@ func initDB() {
 			log.Fatal(myerrors.ErrorsGormInitFail + err.Error())
 		} else {
 			app.GormDbMysql = dbMysql
+			// 执行AutoMigrate
+			autoMigrateTables(dbMysql)
 		}
 	}
 	//sqlserver
@@ -97,6 +101,23 @@ func initDB() {
 			app.GormDbPostgreSql = dbPostgresql
 		}
 	}
+}
+
+// autoMigrateTables 自动迁移数据库表结构
+func autoMigrateTables(db *gorm.DB) {
+	// 需要迁移的表模型列表
+	tables := []interface{}{
+		&models.Tenant{},
+	}
+
+	// 执行AutoMigrate
+	err := db.AutoMigrate(tables...)
+	if err != nil {
+		app.ZapLog.Error("数据库表迁移失败", zap.Error(err))
+		log.Fatal("数据库表迁移失败: " + err.Error())
+	}
+
+	app.ZapLog.Info("数据库表迁移成功")
 }
 
 // 检查必要的文件夹是否存在

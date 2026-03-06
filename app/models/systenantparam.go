@@ -16,8 +16,11 @@ type SysTenantAddRequest struct {
 	PlatformDomain string `form:"platformDomain" json:"platformDomain"`
 	MenuPermission string `form:"menuPermission" json:"menuPermission"`
 	City           string `form:"city" json:"city" validate:"required" message:"城市不能为空"`
-	WorkStartTime  string `form:"workStartTime" json:"workStartTime" validate:"required|regex:^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$" message:"时间不能为空|时间格式必须为HH:mm:ss"`
-	WorkEndTime    string `form:"workEndTime" json:"workEndTime" validate:"required|regex:^([01]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$" message:"时间不能为空|时间格式必须为HH:mm:ss"`
+	WorkStartTime  string `form:"workStartTime" json:"workStartTime" validate:"required" message:"时间不能为空"`
+	WorkEndTime    string `form:"workEndTime" json:"workEndTime" validate:"required" message:"时间不能为空"`
+	SmsStatus      int8   `form:"smsStatus" json:"smsStatus"`
+	IsPublic       int8   `form:"isPublic" json:"isPublic"`
+	IsRepeatNeed   int8   `form:"isRepeatNeed" json:"isRepeatNeed"`
 }
 
 func (r *SysTenantAddRequest) Validate(c *gin.Context) error {
@@ -38,6 +41,9 @@ type SysTenantUpdateRequest struct {
 	City           string `form:"city" json:"city" validate:"required" message:"城市不能为空"`
 	WorkStartTime  string `form:"workStartTime" json:"workStartTime" validate:"required" message:"时间不能为空"`
 	WorkEndTime    string `form:"workEndTime" json:"workEndTime" validate:"required" message:"时间不能为空"`
+	SmsStatus      int8   `form:"smsStatus" json:"smsStatus"`
+	IsPublic       int8   `form:"isPublic" json:"isPublic"`
+	IsRepeatNeed   int8   `form:"isRepeatNeed" json:"isRepeatNeed"`
 }
 
 func (r *SysTenantUpdateRequest) Validate(c *gin.Context) error {
