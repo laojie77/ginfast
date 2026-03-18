@@ -82,7 +82,7 @@ func initDB() {
 		} else {
 			app.GormDbMysql = dbMysql
 			// 执行AutoMigrate
-			autoMigrateTables(dbMysql)
+			//autoMigrateTables(dbMysql)
 		}
 	}
 	//sqlserver
@@ -108,6 +108,7 @@ func autoMigrateTables(db *gorm.DB) {
 	// 需要迁移的表模型列表
 	tables := []interface{}{
 		&models.Tenant{},
+		&models.CustomerValid{},
 	}
 
 	// 执行AutoMigrate

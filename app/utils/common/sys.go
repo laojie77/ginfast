@@ -1,7 +1,9 @@
 package common
 
 import (
+	"crypto/rand"
 	"gin-fast/app/global/app"
+	"math/big"
 	"regexp"
 	"strings"
 	"unicode"
@@ -81,4 +83,20 @@ func ToCamelCaseLower(str string) string {
 	camel := ToCamelCase(str)
 	// 确保首字母小写，其余保持原样
 	return strings.ToLower(camel[:1]) + camel[1:]
+}
+
+func GenerateRandomKey(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	charsetLen := big.NewInt(int64(len(charset)))
+	bytes := make([]byte, length)
+
+	for i := range bytes {
+		// 生成加密安全的随机数，避免直接取模导致的分布不均
+		randomNum, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+		bytes[i] = charset[randomNum.Uint64()]
+	}
+	return string(bytes), nil
 }

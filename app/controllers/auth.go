@@ -59,7 +59,7 @@ func (ac *AuthController) Login(c *gin.Context) {
 		ac.FailAndAbort(c, "用户不存在", nil)
 	}
 	if user.Status != 1 {
-		ac.FailAndAbort(c, "用户未启用", nil)
+		ac.FailAndAbort(c, "当前账号禁止登录", nil)
 	}
 
 	var tenantID uint

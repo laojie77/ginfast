@@ -27,7 +27,8 @@ type CaptchaConfig struct {
 
 // ConfigRequest 配置请求参数
 type ConfigRequest struct {
-	System  SystemConfig  `json:"system" yaml:"System"`
-	Safe    SafeConfig    `json:"safe" yaml:"Safe"`
-	Captcha CaptchaConfig `json:"captcha" yaml:"Captcha"`
+	System        SystemConfig           `json:"system" yaml:"System"`
+	Safe          SafeConfig             `json:"safe" yaml:"Safe"`
+	Captcha       CaptchaConfig          `json:"captcha" yaml:"Captcha"`
+	CustomerExtra map[string]interface{} `json:"customerExtra,omitempty" yaml:"CustomerExtra,omitempty"`
 }

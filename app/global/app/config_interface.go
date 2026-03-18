@@ -40,6 +40,9 @@ type YmlConfigInterf interface {
 	// GetUintSlice 获取无符号整型切片类型配置值
 	GetUintSlice(keyName string) []uint
 
+	// GetStringMap 获取字符串映射类型配置值
+	GetStringMap(keyName string) map[string]interface{}
+
 	// Set 设置配置值（任意类型）
 	Set(keyName string, value interface{})
 

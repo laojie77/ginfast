@@ -66,6 +66,10 @@ func (con ConfigController) GetConfig(ctx *gin.Context) {
 	captchaConfig["length"] = app.ConfigYml.GetInt("captcha.length")
 	result["captcha"] = captchaConfig
 
+	// 获取客户资质配置
+	customerExtraConfig := app.ConfigYml.GetStringMap("customerExtra")
+	result["customerExtra"] = customerExtraConfig
+
 	// 返回成功响应
 	con.Common.Success(ctx, result)
 }
@@ -108,6 +112,11 @@ func (con ConfigController) UpdateConfig(ctx *gin.Context) {
 	// 更新Captcha配置
 	app.ConfigYml.Set("captcha.open", req.Captcha.Open)
 	app.ConfigYml.Set("captcha.length", req.Captcha.Length)
+
+	// 更新客户资质配置（如果存在）
+	if req.CustomerExtra != nil {
+		app.ConfigYml.Set("customerExtra", req.CustomerExtra)
+	}
 
 	// 保存配置到文件
 	if err := app.ConfigYml.SaveConfig(); err != nil {

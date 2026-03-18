@@ -170,6 +170,13 @@ func (y *ymlConfig) GetUintSlice(keyName string) []uint {
 	return uintSlice
 }
 
+func (y *ymlConfig) GetStringMap(keyName string) map[string]interface{} {
+	y.mu.RLock()
+	defer y.mu.RUnlock()
+	value := y.viper.GetStringMap(keyName)
+	return value
+}
+
 // Set 设置配置值
 func (y *ymlConfig) Set(keyName string, value interface{}) {
 	y.mu.Lock()
