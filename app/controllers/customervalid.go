@@ -129,16 +129,15 @@ func (c *CustomerValidController) Update(context *gin.Context) {
 
 // Delete 删除客户有效性标签
 func (c *CustomerValidController) Delete(context *gin.Context) {
-	idStr := context.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		c.FailAndAbort(context, "无效的ID", err)
+	var req models.CustomerValidDeleteRequest
+	if err := req.Validate(context); err != nil {
+		c.FailAndAbort(context, err.Error(), err)
 		return
 	}
 
 	// 查找记录
 	var customerValid models.CustomerValid
-	db := app.DB().Scopes(tenanthelper.TenantScope(context)).Where("id = ?", id)
+	db := app.DB().Scopes(tenanthelper.TenantScope(context)).Where("id = ?", req.ID)
 	
 	if err := db.First(&customerValid).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {

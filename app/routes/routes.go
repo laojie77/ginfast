@@ -396,7 +396,7 @@ func InitRoutes(engine *gin.Engine) {
 				// 更新客户有效性标签
 				customerValid.PUT("/edit", customerValidControllers.Update)
 				// 删除客户有效性标签
-				customerValid.DELETE("/:id", customerValidControllers.Delete)
+				customerValid.DELETE("/delete", customerValidControllers.Delete)
 			}
 		}
 	}
