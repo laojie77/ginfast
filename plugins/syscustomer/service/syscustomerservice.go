@@ -59,6 +59,7 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 	sysCustomer.Remarks = req.Remarks
 	sysCustomer.Age = req.Age
 	sysCustomer.IsLock = req.IsLock
+	sysCustomer.SinglePieceType = req.SinglePieceType
 	// 保存到数据库
 	if err := sysCustomer.Update(c); err != nil {
 		return err

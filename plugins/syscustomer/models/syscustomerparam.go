@@ -158,6 +158,7 @@ type SysCustomerCreateRequest struct {
 	DepartmentId int    `form:"departmentId"`                                 // 所属部门
 	Remarks      string `form:"remarks"`                                      // 客户备注
 	Age          int    `form:"age"`                                          // 年龄
+	From         int    `form:"from"`                                         // 客户来源
 }
 
 // Validate 验证请求参数
@@ -168,21 +169,23 @@ func (r *SysCustomerCreateRequest) Validate(c *gin.Context) error {
 // SysCustomerUpdateRequest 更新sys_customer请求参数
 type SysCustomerUpdateRequest struct {
 	models.Validator
-	Id           int    `form:"id" validate:"required" message:"主键ID不能为空"`    // 主键ID
-	Num          string `form:"num"`                                          // 客户编号
-	Name         string `form:"name"`                                         // 客户姓名
-	Mobile       string `form:"mobile" validate:"required" message:"手机号不能为空"` // 手机号
-	MoneyDemand  int    `form:"moneyDemand"`                                  // 需求金额
-	ChannelId    int    `form:"channelId"`                                    // 渠道来源
-	CustomerStar int    `form:"customerStar"`                                 // 星级
-	Status       int    `form:"status"`                                       // 业务阶段
-	Intention    int    `form:"intention"`                                    // 客户有效
-	Extra        string `form:"extra"`                                        // 扩展属性
-	Sex          int    `form:"sex"`                                          // 性别
-	DepartmentId int    `form:"departmentId"`                                 // 所属部门
-	Remarks      string `form:"remarks"`                                      // 客户备注
-	Age          int    `form:"age"`                                          // 年龄
-	IsLock       int    `form:"isLock"`                                       // 年龄
+	Id              int    `form:"id" validate:"required" message:"主键ID不能为空"`    // 主键ID
+	Num             string `form:"num"`                                          // 客户编号
+	Name            string `form:"name"`                                         // 客户姓名
+	Mobile          string `form:"mobile" validate:"required" message:"手机号不能为空"` // 手机号
+	MoneyDemand     int    `form:"moneyDemand"`                                  // 需求金额
+	ChannelId       int    `form:"channelId"`                                    // 渠道来源
+	CustomerStar    int    `form:"customerStar"`                                 // 星级
+	Status          int    `form:"status"`                                       // 业务阶段
+	Intention       int    `form:"intention"`                                    // 客户有效
+	Extra           string `form:"extra"`                                        // 扩展属性
+	Sex             int    `form:"sex"`                                          // 性别
+	DepartmentId    int    `form:"departmentId"`                                 // 所属部门
+	Remarks         string `form:"remarks"`                                      // 客户备注
+	Age             int    `form:"age"`                                          // 年龄
+	IsLock          int    `form:"isLock"`                                       // 年龄
+	SinglePieceType int    `form:"singlePieceType"`                              // 借贷类型
+	From            int    `form:"from"`                                         // 客户来源
 }
 
 // Validate 验证请求参数

@@ -22,6 +22,7 @@ type SysCustomer struct {
 	CustomerStar       int            `gorm:"column:customer_star" json:"customerStar"`                // 星级
 	Status             int            `gorm:"column:status;not null;default:1;index" json:"status"`    // 业务阶段
 	Intention          int            `gorm:"column:intention;not null;default:0" json:"intention"`    // 客户有效
+	From               int            `gorm:"column:from;not null;default:1" json:"from"`              // 客户来源
 	LastTime           *time.Time     `gorm:"column:last_time" json:"lastTime"`                        // 最后操作时间
 	Extra              string         `gorm:"column:extra;type:json" json:"extra"`                     // 扩展属性
 	SinglePieceType    int            `gorm:"column:single_piece_type" json:"singlePieceType"`         // 贷款类型

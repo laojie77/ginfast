@@ -3,8 +3,9 @@ package models
 import (
 	"context"
 	"gin-fast/app/global/app"
-	"gorm.io/gorm"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 // SysCustomerTraces sys_customer_traces 模型结构体
@@ -23,6 +24,7 @@ type SysCustomerTraces struct {
 type SysCustomerTracesWithUser struct {
 	SysCustomerTraces
 	UserName string `json:"userName"` // 用户昵称
+	Avatar   string `json:"avatar"`   // 用户头像
 }
 
 // SysCustomerTracesList sys_customer_traces 列表
@@ -45,7 +47,7 @@ func NewSysCustomerTracesWithUserList() *SysCustomerTracesWithUserList {
 func (l *SysCustomerTracesWithUserList) FindWithUser(c context.Context, funcs ...func(*gorm.DB) *gorm.DB) error {
 	return app.DB().WithContext(c).
 		Table("sys_customer_traces").
-		Select("sys_customer_traces.*, sys_users.nick_name as user_name").
+		Select("sys_customer_traces.*, sys_users.nick_name as user_name, sys_users.avatar as avatar").
 		Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
 		Scopes(funcs...).
 		Find(l).Error
