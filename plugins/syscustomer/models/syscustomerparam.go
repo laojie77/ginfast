@@ -8,7 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Extra字段属性定义常量
 const (
 	ExtraPropertyOccupation      = "occupation"
 	ExtraPropertyHouse           = "house"
@@ -24,7 +23,6 @@ const (
 	IntentionValidId             = "intention_valid_id"
 )
 
-// 所有属性列表
 var AllExtraProperties = []string{
 	ExtraPropertyOccupation,
 	ExtraPropertyHouse,
@@ -38,7 +36,6 @@ var AllExtraProperties = []string{
 	ExtraPropertyEducation,
 }
 
-// 属性显示名称映射
 var ExtraPropertyLabels = map[string]string{
 	ExtraPropertyOccupation:      "职业",
 	ExtraPropertyHouse:           "房产",
@@ -52,28 +49,28 @@ var ExtraPropertyLabels = map[string]string{
 	ExtraPropertyEducation:       "学历",
 }
 
-// SysCustomerListRequest sys_customer列表请求参数
+// SysCustomerListRequest sys_customer 列表请求参数
 type SysCustomerListRequest struct {
 	models.BasePaging
 	models.Validator
-	Num             *string    `form:"num"`             // 客户编号
-	Name            *string    `form:"name"`            // 客户姓名
-	Mobile          *string    `form:"mobile"`          // 手机号
-	MoneyDemand     *int       `form:"moneyDemand"`     // 需求金额
-	ChannelId       *int       `form:"channelId"`       // 渠道来源
-	UserId          *int       `form:"userId"`          // 跟进人
-	CustomerStar    *int       `form:"customerStar"`    // 星级
-	Status          *int       `form:"status"`          // 业务阶段
-	Intention       *int       `form:"intention"`       // 客户有效
-	SinglePieceType *int       `form:"singlePieceType"` // 贷款类型
-	AllotTime       *time.Time `form:"allotTime"`       // 分配时间
-	DepartmentId    *int       `form:"departmentId"`    // 所属部门
-	City            *string    `form:"city"`            // 所在城市
-	IsReassign      *int       `form:"isReassign"`      // 再分配
-	IsQuit          *int       `form:"isQuit"`          // 离职数据
-	IsRepeat        *int       `form:"isRepeat"`        // 重复标记
-	StarStatus      *int       `form:"starStatus"`      // 星级回传
-	IsLock          *int       `form:"isLock"`          // 是否锁定
+	Num             *string    `form:"num"`
+	Name            *string    `form:"name"`
+	Mobile          *string    `form:"mobile"`
+	MoneyDemand     *int       `form:"moneyDemand"`
+	ChannelId       *int       `form:"channelId"`
+	UserID          *int       `form:"userId"`
+	CustomerStar    *int       `form:"customerStar"`
+	Status          *int       `form:"status"`
+	Intention       *int       `form:"intention"`
+	SinglePieceType *int       `form:"singlePieceType"`
+	AllotTime       *time.Time `form:"allotTime"`
+	DeptID          *int       `form:"deptId"`
+	City            *string    `form:"city"`
+	IsReassign      *int       `form:"isReassign"`
+	IsQuit          *int       `form:"isQuit"`
+	IsRepeat        *int       `form:"isRepeat"`
+	StarStatus      *int       `form:"starStatus"`
+	IsLock          *int       `form:"isLock"`
 }
 
 // Validate 验证请求参数
@@ -99,8 +96,8 @@ func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 		if r.ChannelId != nil {
 			db = db.Where("channel_id = ?", *r.ChannelId)
 		}
-		if r.UserId != nil {
-			db = db.Where("user_id = ?", *r.UserId)
+		if r.UserID != nil {
+			db = db.Where("user_id = ?", *r.UserID)
 		}
 		if r.CustomerStar != nil {
 			db = db.Where("customer_star = ?", *r.CustomerStar)
@@ -117,8 +114,8 @@ func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 		if r.AllotTime != nil {
 			db = db.Where("allot_time = ?", *r.AllotTime)
 		}
-		if r.DepartmentId != nil {
-			db = db.Where("department_id = ?", *r.DepartmentId)
+		if r.DeptID != nil {
+			db = db.Where("dept_id = ?", *r.DeptID)
 		}
 		if r.City != nil {
 			db = db.Where("city = ?", *r.City)
@@ -142,23 +139,23 @@ func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-// SysCustomerCreateRequest 创建sys_customer请求参数
+// SysCustomerCreateRequest 创建 sys_customer 请求参数
 type SysCustomerCreateRequest struct {
 	models.Validator
-	Num          string `form:"num"`                                          // 客户编号
-	Name         string `form:"name"`                                         // 客户姓名
-	Mobile       string `form:"mobile" validate:"required" message:"手机号不能为空"` // 手机号
-	MoneyDemand  int    `form:"moneyDemand"`                                  // 需求金额
-	ChannelId    int    `form:"channelId"`                                    // 渠道来源
-	CustomerStar int    `form:"customerStar"`                                 // 星级
-	Status       int    `form:"status"`                                       // 业务阶段
-	Intention    int    `form:"intention"`                                    // 客户有效
-	Extra        string `form:"extra"`                                        // 扩展属性
-	Sex          int    `form:"sex"`                                          // 性别
-	DepartmentId int    `form:"departmentId"`                                 // 所属部门
-	Remarks      string `form:"remarks"`                                      // 客户备注
-	Age          int    `form:"age"`                                          // 年龄
-	From         int    `form:"from"`                                         // 客户来源
+	Num          string `form:"num"`
+	Name         string `form:"name"`
+	Mobile       string `form:"mobile" validate:"required" message:"手机号不能为空"`
+	MoneyDemand  int    `form:"moneyDemand"`
+	ChannelID    int    `form:"channelId"`
+	CustomerStar int    `form:"customerStar"`
+	Status       int    `form:"status"`
+	Intention    int    `form:"intention"`
+	Extra        string `form:"extra"`
+	Sex          int    `form:"sex"`
+	DeptID       int    `form:"deptId"`
+	Remarks      string `form:"remarks"`
+	Age          int    `form:"age"`
+	From         int    `form:"from"`
 }
 
 // Validate 验证请求参数
@@ -166,26 +163,26 @@ func (r *SysCustomerCreateRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
 }
 
-// SysCustomerUpdateRequest 更新sys_customer请求参数
+// SysCustomerUpdateRequest 更新 sys_customer 请求参数
 type SysCustomerUpdateRequest struct {
 	models.Validator
-	Id              int    `form:"id" validate:"required" message:"主键ID不能为空"`    // 主键ID
-	Num             string `form:"num"`                                          // 客户编号
-	Name            string `form:"name"`                                         // 客户姓名
-	Mobile          string `form:"mobile" validate:"required" message:"手机号不能为空"` // 手机号
-	MoneyDemand     int    `form:"moneyDemand"`                                  // 需求金额
-	ChannelId       int    `form:"channelId"`                                    // 渠道来源
-	CustomerStar    int    `form:"customerStar"`                                 // 星级
-	Status          int    `form:"status"`                                       // 业务阶段
-	Intention       int    `form:"intention"`                                    // 客户有效
-	Extra           string `form:"extra"`                                        // 扩展属性
-	Sex             int    `form:"sex"`                                          // 性别
-	DepartmentId    int    `form:"departmentId"`                                 // 所属部门
-	Remarks         string `form:"remarks"`                                      // 客户备注
-	Age             int    `form:"age"`                                          // 年龄
-	IsLock          int    `form:"isLock"`                                       // 年龄
-	SinglePieceType int    `form:"singlePieceType"`                              // 借贷类型
-	From            int    `form:"from"`                                         // 客户来源
+	Id              int    `form:"id" validate:"required" message:"主键ID不能为空"`
+	Num             string `form:"num"`
+	Name            string `form:"name"`
+	Mobile          string `form:"mobile" validate:"required" message:"手机号不能为空"`
+	MoneyDemand     int    `form:"moneyDemand"`
+	ChannelID       int    `form:"channelId"`
+	CustomerStar    int    `form:"customerStar"`
+	Status          int    `form:"status"`
+	Intention       int    `form:"intention"`
+	Extra           string `form:"extra"`
+	Sex             int    `form:"sex"`
+	DeptID          int    `form:"deptId"`
+	Remarks         string `form:"remarks"`
+	Age             int    `form:"age"`
+	IsLock          int    `form:"isLock"`
+	SinglePieceType int    `form:"singlePieceType"`
+	From            int    `form:"from"`
 }
 
 // Validate 验证请求参数
@@ -193,10 +190,10 @@ func (r *SysCustomerUpdateRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
 }
 
-// SysCustomerDeleteRequest 删除sys_customer请求参数
+// SysCustomerDeleteRequest 删除 sys_customer 请求参数
 type SysCustomerDeleteRequest struct {
 	models.Validator
-	Id int `form:"id" validate:"required" message:"主键ID不能为空"` // 主键ID
+	Id int `form:"id" validate:"required" message:"主键ID不能为空"`
 }
 
 // Validate 验证请求参数
@@ -204,10 +201,10 @@ func (r *SysCustomerDeleteRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
 }
 
-// SysCustomerGetByIDRequest 根据ID获取sys_customer请求参数
+// SysCustomerGetByIDRequest 根据 ID 获取 sys_customer 请求参数
 type SysCustomerGetByIDRequest struct {
 	models.Validator
-	Id int `uri:"id" validate:"required" message:"主键ID不能为空"` // 主键ID
+	Id int `uri:"id" validate:"required" message:"主键ID不能为空"`
 }
 
 // Validate 验证请求参数

@@ -12,7 +12,7 @@ type SysCustomerTracesListRequest struct {
 	models.BasePaging
 	models.Validator
 	CustomerId *int64  `form:"customerId"` // 客户
-	UserId     *int    `form:"userId"`     // 操作用户
+	UserID     *int    `form:"userId"`     // 操作用户
 	Data       *string `form:"data"`       // 跟进内容
 }
 
@@ -27,8 +27,8 @@ func (r *SysCustomerTracesListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 		if r.CustomerId != nil {
 			db = db.Where("sys_customer_traces.customer_id = ?", *r.CustomerId)
 		}
-		if r.UserId != nil {
-			db = db.Where("sys_customer_traces.user_id = ?", *r.UserId)
+		if r.UserID != nil {
+			db = db.Where("sys_customer_traces.user_id = ?", *r.UserID)
 		}
 		if r.Data != nil {
 			// 默认等于查询
@@ -44,7 +44,7 @@ func (r *SysCustomerTracesListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 type SysCustomerTracesCreateRequest struct {
 	models.Validator
 	CustomerId int64  `json:"customerId" validate:"required" message:"客户ID不能为空"` // 客户
-	UserId     int    `json:"userId"`                                            // 操作用户
+	UserID     int    `json:"userId"`                                            // 操作用户
 	Data       string `json:"data" validate:"required" message:"跟进内容不能为空"`       // 跟进内容
 }
 
@@ -58,7 +58,7 @@ type SysCustomerTracesUpdateRequest struct {
 	models.Validator
 	Id         uint64  `json:"id" validate:"required" message:"Id不能为空"` // Id
 	CustomerId *int64  `json:"customerId"`                              // 客户
-	UserId     *int    `json:"userId"`                                  // 操作用户
+	UserID     *int    `json:"userId"`                                  // 操作用户
 	Data       *string `json:"data"`                                    // 跟进内容
 }
 

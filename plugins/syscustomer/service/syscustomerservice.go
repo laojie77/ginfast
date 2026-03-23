@@ -1,6 +1,9 @@
 package service
 
 import (
+	"gin-fast/app/global/app"
+	"gin-fast/app/utils/common"
+	"gin-fast/app/utils/datascope"
 	"gin-fast/app/utils/tenanthelper"
 	"gin-fast/plugins/syscustomer/models"
 
@@ -16,6 +19,18 @@ func NewSysCustomerService() *SysCustomerService {
 	return &SysCustomerService{}
 }
 
+func (s *SysCustomerService) getScopedCustomerByID(c *gin.Context, id int) (*models.SysCustomer, error) {
+	sysCustomer := models.NewSysCustomer()
+	err := app.DB().WithContext(c).
+		Model(&models.SysCustomer{}).
+		Scopes(datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c)).
+		First(sysCustomer, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return sysCustomer, nil
+}
+
 // Create 创建sys_customer
 func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreateRequest) (*models.SysCustomer, error) {
 	// 创建sys_customer记录
@@ -23,7 +38,7 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	sysCustomer.Name = req.Name
 	sysCustomer.Mobile = req.Mobile
 	sysCustomer.MoneyDemand = req.MoneyDemand
-	sysCustomer.ChannelId = req.ChannelId
+	sysCustomer.ChannelID = req.ChannelID
 	sysCustomer.CustomerStar = req.CustomerStar
 	sysCustomer.Status = req.Status
 	sysCustomer.Intention = req.Intention
@@ -31,6 +46,9 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	sysCustomer.Sex = req.Sex
 	sysCustomer.Remarks = req.Remarks
 	sysCustomer.Age = req.Age
+	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 {
+		sysCustomer.UserID = int(currentUserID)
+	}
 	// 保存到数据库
 	if err := sysCustomer.Create(c); err != nil {
 		return nil, err
@@ -42,15 +60,15 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 // Update 更新sys_customer
 func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdateRequest) error {
 	// 查找sys_customer记录
-	sysCustomer := models.NewSysCustomer()
-	if err := sysCustomer.GetByID(c, req.Id); err != nil {
+	sysCustomer, err := s.getScopedCustomerByID(c, req.Id)
+	if err != nil {
 		return err
 	}
 	// 更新sys_customer信息
 	sysCustomer.Name = req.Name
 	sysCustomer.Mobile = req.Mobile
 	sysCustomer.MoneyDemand = req.MoneyDemand
-	sysCustomer.ChannelId = req.ChannelId
+	sysCustomer.ChannelID = req.ChannelID
 	sysCustomer.CustomerStar = req.CustomerStar
 	sysCustomer.Status = req.Status
 	sysCustomer.Intention = req.Intention
@@ -70,8 +88,8 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 // Delete 删除sys_customer
 func (s *SysCustomerService) Delete(c *gin.Context, id int) error {
 	// 查找sys_customer记录
-	sysCustomer := models.NewSysCustomer()
-	if err := sysCustomer.GetByID(c, id); err != nil {
+	sysCustomer, err := s.getScopedCustomerByID(c, id)
+	if err != nil {
 		return err
 	}
 
@@ -85,13 +103,7 @@ func (s *SysCustomerService) Delete(c *gin.Context, id int) error {
 
 // GetByID 根据ID获取sys_customer
 func (s *SysCustomerService) GetByID(c *gin.Context, id int) (*models.SysCustomer, error) {
-	// 查找sys_customer记录
-	sysCustomer := models.NewSysCustomer()
-	if err := sysCustomer.GetByID(c, id); err != nil {
-		return nil, err
-	}
-
-	return sysCustomer, nil
+	return s.getScopedCustomerByID(c, id)
 }
 
 // List sys_customer列表（分页查询）
@@ -99,7 +111,7 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 	// 获取总数
 	sysCustomerList := models.NewSysCustomerList()
 	scopes := []func(*gorm.DB) *gorm.DB{req.Handle()}
-	scopes = append(scopes, tenanthelper.TenantScope(c))
+	scopes = append(scopes, datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c))
 	total, err := sysCustomerList.GetTotal(c, scopes...)
 	if err != nil {
 		return nil, 0, err

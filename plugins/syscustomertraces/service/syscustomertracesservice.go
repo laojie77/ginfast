@@ -30,7 +30,7 @@ func (s *SysCustomerTracesService) Create(c *gin.Context, req models.SysCustomer
 	// 创建sys_customer_traces记录
 	sysCustomerTraces := models.NewSysCustomerTraces()
 	sysCustomerTraces.CustomerId = req.CustomerId
-	sysCustomerTraces.UserId = req.UserId
+	sysCustomerTraces.UserID = req.UserID
 	sysCustomerTraces.Data = req.Data
 
 	// 保存到数据库
@@ -53,8 +53,8 @@ func (s *SysCustomerTracesService) Update(c *gin.Context, req models.SysCustomer
 	if req.CustomerId != nil {
 		sysCustomerTraces.CustomerId = *req.CustomerId
 	}
-	if req.UserId != nil {
-		sysCustomerTraces.UserId = *req.UserId
+	if req.UserID != nil {
+		sysCustomerTraces.UserID = *req.UserID
 	}
 	if req.Data != nil {
 		sysCustomerTraces.Data = *req.Data

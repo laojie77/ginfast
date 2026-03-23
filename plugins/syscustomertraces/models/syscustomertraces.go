@@ -12,7 +12,7 @@ import (
 type SysCustomerTraces struct {
 	Id         uint64         `gorm:"column:id;primaryKey;not null;autoIncrement" json:"id"`     // Id
 	CustomerId int64          `gorm:"column:customer_id;not null;index" json:"customerId"`       // 客户
-	UserId     int            `gorm:"column:user_id;not null;index" json:"userId"`               // 操作用户
+	UserID     int            `gorm:"column:user_id;not null;index" json:"userId"`               // 操作用户
 	TenantID   uint           `gorm:"column:tenant_id;not null;default:0;index" json:"tenantId"` // 所属平台公司
 	Data       string         `gorm:"column:data;not null" json:"data"`                          // 跟进内容
 	CreatedAt  *time.Time     `gorm:"column:created_at;index" json:"createdAt"`                  // CreatedAt

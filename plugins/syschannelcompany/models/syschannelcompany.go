@@ -11,8 +11,8 @@ import (
 // SysChannelCompany sys_channel_company 模型结构体
 type SysChannelCompany struct {
 	Id            int            `gorm:"column:id;primaryKey;not null;autoIncrement" json:"id"`             // Id
-	ChannelId     int            `gorm:"column:channel_id" json:"channelId"`                                // 渠道ID
-	TenantId      int            `gorm:"column:tenant_id" json:"tenantId"`                                  // 公司平台
+	ChannelID     int            `gorm:"column:channel_id" json:"channelId"`                                // 渠道ID
+	TenantID      int            `gorm:"column:tenant_id" json:"tenantId"`                                  // 公司平台
 	City          string         `gorm:"column:city" json:"city"`                                           // 城市
 	HiddenName    string         `gorm:"column:hidden_name" json:"hiddenName"`                              // 渠道别名
 	Rate          float64        `gorm:"column:rate;default:0.00" json:"rate"`                              // 优质率

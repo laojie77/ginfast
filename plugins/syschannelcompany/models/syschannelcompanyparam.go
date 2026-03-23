@@ -11,8 +11,8 @@ import (
 type SysChannelCompanyListRequest struct {
 	models.BasePaging
 	models.Validator
-	ChannelId  *int    `form:"channelId"`  // 渠道ID
-	TenantId   *int    `form:"tenantId"`   // 公司平台
+	ChannelID  *int    `form:"channelId"`  // 渠道ID
+	TenantID   *int    `form:"tenantId"`   // 公司平台
 	City       *string `form:"city"`       // 城市
 	HiddenName *string `form:"hiddenName"` // 渠道名称
 }
@@ -25,11 +25,11 @@ func (r *SysChannelCompanyListRequest) Validate(c *gin.Context) error {
 // Handle 获取查询条件
 func (r *SysChannelCompanyListRequest) Handle() func(*gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		if r.ChannelId != nil {
-			db = db.Where("channel_id = ?", *r.ChannelId)
+		if r.ChannelID != nil {
+			db = db.Where("channel_id = ?", *r.ChannelID)
 		}
-		if r.TenantId != nil {
-			db = db.Where("tenant_id = ?", *r.TenantId)
+		if r.TenantID != nil {
+			db = db.Where("tenant_id = ?", *r.TenantID)
 		}
 		if r.City != nil {
 			db = db.Where("city LIKE ?", "%"+*r.City+"%")
@@ -44,8 +44,8 @@ func (r *SysChannelCompanyListRequest) Handle() func(*gorm.DB) *gorm.DB {
 // SysChannelCompanyCreateRequest 创建sys_channel_company请求参数
 type SysChannelCompanyCreateRequest struct {
 	models.Validator
-	ChannelId     int    `form:"channelId" validate:"required" message:"渠道ID不能为空"`       // 渠道ID
-	TenantId      int    `form:"tenantId" validate:"required" message:"公司平台不能为空"`        // 公司平台
+	ChannelID     int    `form:"channelId" validate:"required" message:"渠道ID不能为空"`       // 渠道ID
+	TenantID      int    `form:"tenantId" validate:"required" message:"公司平台不能为空"`        // 公司平台
 	City          string `form:"city" validate:"required" message:"城市不能为空"`              // 城市
 	HiddenName    string `form:"hiddenName" validate:"required" message:"渠道别名不能为空"`      // 渠道别名
 	IsStar        int    `form:"isStar"`                                                 // 是否回传
@@ -61,8 +61,8 @@ func (r *SysChannelCompanyCreateRequest) Validate(c *gin.Context) error {
 type SysChannelCompanyUpdateRequest struct {
 	models.Validator
 	Id            int    `form:"id" validate:"required" message:"Id不能为空"`                // Id
-	ChannelId     int    `form:"channelId" validate:"required" message:"渠道ID不能为空"`       // 渠道ID
-	TenantId      int    `form:"tenantId" validate:"required" message:"公司平台不能为空"`        // 公司平台
+	ChannelID     int    `form:"channelId" validate:"required" message:"渠道ID不能为空"`       // 渠道ID
+	TenantID      int    `form:"tenantId" validate:"required" message:"公司平台不能为空"`        // 公司平台
 	City          string `form:"city" validate:"required" message:"城市不能为空"`              // 城市
 	HiddenName    string `form:"hiddenName" validate:"required" message:"渠道别名不能为空"`      // 渠道别名
 	IsStar        int    `form:"isStar"`                                                 // 是否回传

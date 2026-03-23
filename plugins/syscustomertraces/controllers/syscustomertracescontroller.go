@@ -30,8 +30,8 @@ func (c *SysCustomerTracesController) Create(ctx *gin.Context) {
 	}
 
 	// 如果UserId为0，则使用当前登录用户ID
-	if req.UserId == 0 {
-		req.UserId = int(common.GetCurrentUserID(ctx))
+	if req.UserID == 0 {
+		req.UserID = int(common.GetCurrentUserID(ctx))
 	}
 
 	sysCustomerTraces, err := c.SysCustomerTracesService.Create(ctx, req)

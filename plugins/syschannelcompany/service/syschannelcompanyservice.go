@@ -20,8 +20,8 @@ func NewSysChannelCompanyService() *SysChannelCompanyService {
 func (s *SysChannelCompanyService) Create(c *gin.Context, req models.SysChannelCompanyCreateRequest) (*models.SysChannelCompany, error) {
 	// 创建sys_channel_company记录
 	sysChannelCompany := models.NewSysChannelCompany()
-	sysChannelCompany.ChannelId = req.ChannelId
-	sysChannelCompany.TenantId = req.TenantId
+	sysChannelCompany.ChannelID = req.ChannelID
+	sysChannelCompany.TenantID = req.TenantID
 	sysChannelCompany.City = req.City
 	sysChannelCompany.HiddenName = req.HiddenName
 	sysChannelCompany.IsStar = req.IsStar
@@ -42,8 +42,8 @@ func (s *SysChannelCompanyService) Update(c *gin.Context, req models.SysChannelC
 		return err
 	}
 	// 更新sys_channel_company信息
-	sysChannelCompany.ChannelId = req.ChannelId
-	sysChannelCompany.TenantId = req.TenantId
+	sysChannelCompany.ChannelID = req.ChannelID
+	sysChannelCompany.TenantID = req.TenantID
 	sysChannelCompany.City = req.City
 	sysChannelCompany.HiddenName = req.HiddenName
 	sysChannelCompany.IsStar = req.IsStar

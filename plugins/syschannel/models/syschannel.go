@@ -33,7 +33,7 @@ type SysChannel struct {
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"deletedAt"`
 
 	// 关联关系
-	ChannelCompanyList []models.SysChannelCompany `gorm:"foreignKey:ChannelId" json:"channelCompanyList"` // 渠道配置列表
+	ChannelCompanyList []models.SysChannelCompany `gorm:"foreignKey:ChannelID;references:Id" json:"channelCompanyList"` // 渠道配置列表
 
 }
 
