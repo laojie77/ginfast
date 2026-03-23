@@ -4,6 +4,7 @@ import (
 	"context"
 	"gin-fast/app/global/app"
 	"gin-fast/exampleutils/snowflakehelper"
+	"gin-fast/plugins/syscustomertraces/models"
 	"time"
 
 	"gorm.io/gorm"
@@ -56,6 +57,8 @@ type SysCustomer struct {
 	CreatedAt          *time.Time     `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt          *time.Time     `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt          gorm.DeletedAt `gorm:"column:deleted_at" json:"deletedAt"`
+	// 关联关系
+	CustomerTracesList []models.SysCustomerTraces `gorm:"foreignKey:CustomerID;references:Id" json:"customerTracesList"` // 客户跟进列表
 }
 
 // SysCustomerList sys_customer 列表

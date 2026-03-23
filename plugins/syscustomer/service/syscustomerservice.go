@@ -19,10 +19,28 @@ func NewSysCustomerService() *SysCustomerService {
 	return &SysCustomerService{}
 }
 
+func (s *SysCustomerService) customerTracesPreload(c *gin.Context) func(db *gorm.DB) *gorm.DB {
+	claims := common.GetClaims(c)
+
+	return func(db *gorm.DB) *gorm.DB {
+		db = db.
+			Select("sys_customer_traces.*, sys_users.nick_name AS user_name, sys_users.avatar AS avatar").
+			Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
+			Order("sys_customer_traces.created_at ASC, sys_customer_traces.id ASC")
+
+		if claims != nil {
+			return db.Where("sys_customer_traces.tenant_id = ?", claims.TenantID)
+		}
+
+		return db.Where("1 = 0")
+	}
+}
+
 func (s *SysCustomerService) getScopedCustomerByID(c *gin.Context, id int) (*models.SysCustomer, error) {
 	sysCustomer := models.NewSysCustomer()
 	err := app.DB().WithContext(c).
 		Model(&models.SysCustomer{}).
+		Preload("CustomerTracesList", s.customerTracesPreload(c)).
 		Scopes(datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c)).
 		First(sysCustomer, id).Error
 	if err != nil {
@@ -118,7 +136,11 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 	}
 	scopes = append(scopes, req.Paginate())
 	// 获取分页数据
-	err = sysCustomerList.Find(c, scopes...)
+	err = app.DB().WithContext(c).
+		Model(&models.SysCustomer{}).
+		Preload("CustomerTracesList", s.customerTracesPreload(c)).
+		Scopes(scopes...).
+		Find(sysCustomerList).Error
 	if err != nil {
 		return nil, 0, err
 	}
