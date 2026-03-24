@@ -147,15 +147,15 @@ type SysCustomerCreateRequest struct {
 	Mobile       string `form:"mobile" validate:"required" message:"手机号不能为空"`
 	MoneyDemand  int    `form:"moneyDemand"`
 	ChannelID    int    `form:"channelId"`
-	CustomerStar int    `form:"customerStar"`
-	Status       int    `form:"status"`
-	Intention    int    `form:"intention"`
+	CustomerStar *int   `form:"customerStar"`
+	Status       *int   `form:"status"`
+	Intention    *int   `form:"intention"`
 	Extra        string `form:"extra"`
-	Sex          int    `form:"sex"`
-	DeptID       int    `form:"deptId"`
+	Sex          *int   `form:"sex"`
+	DeptID       *int   `form:"deptId"`
 	Remarks      string `form:"remarks"`
-	Age          int    `form:"age"`
-	From         int    `form:"from"`
+	Age          *int   `form:"age"`
+	From         *int   `form:"from"`
 }
 
 // Validate 验证请求参数
@@ -172,7 +172,7 @@ type SysCustomerUpdateRequest struct {
 	Mobile          string `form:"mobile" validate:"required" message:"手机号不能为空"`
 	MoneyDemand     int    `form:"moneyDemand"`
 	ChannelID       int    `form:"channelId"`
-	CustomerStar    int    `form:"customerStar"`
+	CustomerStar    *int   `form:"customerStar"`
 	Status          int    `form:"status"`
 	Intention       int    `form:"intention"`
 	Extra           string `form:"extra"`

@@ -1,13 +1,18 @@
 package service
 
 import (
+	"crypto/md5"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"gin-fast/app/global/app"
+	appModels "gin-fast/app/models"
 	"gin-fast/app/utils/common"
 	"gin-fast/app/utils/datascope"
 	"gin-fast/app/utils/tenanthelper"
+	"gin-fast/exampleutils/snowflakehelper"
 	"gin-fast/plugins/syscustomer/models"
 	traceModels "gin-fast/plugins/syscustomertraces/models"
 
@@ -16,6 +21,8 @@ import (
 )
 
 type SysCustomerService struct{}
+
+const customerDefaultFrom = 3
 
 func NewSysCustomerService() *SysCustomerService {
 	return &SysCustomerService{}
@@ -51,23 +58,141 @@ func (s *SysCustomerService) getScopedCustomerByID(c *gin.Context, id int) (*mod
 	return sysCustomer, nil
 }
 
-func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreateRequest) (*models.SysCustomer, error) {
-	sysCustomer := models.NewSysCustomer()
-	sysCustomer.Name = req.Name
-	sysCustomer.Mobile = req.Mobile
-	sysCustomer.MoneyDemand = req.MoneyDemand
-	sysCustomer.ChannelID = req.ChannelID
-	sysCustomer.CustomerStar = req.CustomerStar
-	sysCustomer.Status = req.Status
-	sysCustomer.Intention = req.Intention
-	sysCustomer.Extra = req.Extra
-	sysCustomer.Sex = req.Sex
-	sysCustomer.Remarks = req.Remarks
-	sysCustomer.Age = req.Age
-	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 {
-		sysCustomer.UserID = int(currentUserID)
+func (s *SysCustomerService) getCurrentUserDeptID(c *gin.Context, userID uint) (int, error) {
+	var user appModels.User
+	if err := app.DB().WithContext(c).Select("dept_id").Where("id = ?", userID).First(&user).Error; err != nil {
+		return 0, err
 	}
-	if err := sysCustomer.Create(c); err != nil {
+	return int(user.DeptID), nil
+}
+
+func (s *SysCustomerService) normalizeCreateExtra(extra string) (string, error) {
+	extra = strings.TrimSpace(extra)
+	if extra == "" {
+		return "{}", nil
+	}
+
+	var extraObj map[string]interface{}
+	if err := json.Unmarshal([]byte(extra), &extraObj); err != nil {
+		return "", fmt.Errorf("extra 字段不是合法的 JSON: %w", err)
+	}
+
+	extraBytes, err := json.Marshal(extraObj)
+	if err != nil {
+		return "", err
+	}
+
+	return string(extraBytes), nil
+}
+
+func (s *SysCustomerService) normalizeMobile(mobile string) string {
+	mobile = strings.TrimSpace(mobile)
+	mobile = strings.ReplaceAll(mobile, " ", "")
+	return mobile
+}
+
+func (s *SysCustomerService) buildMobileHash(mobile string) string {
+	if mobile == "" {
+		return ""
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte(mobile)))
+}
+
+func appendSelectedField(fields []string, field string) []string {
+	for _, current := range fields {
+		if current == field {
+			return fields
+		}
+	}
+	return append(fields, field)
+}
+
+func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreateRequest) (*models.SysCustomer, error) {
+	mobile := s.normalizeMobile(req.Mobile)
+	extra, err := s.normalizeCreateExtra(req.Extra)
+	if err != nil {
+		return nil, err
+	}
+
+	num := strings.TrimSpace(req.Num)
+	if num == "" {
+		num, err = snowflakehelper.GenerateID()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	sysCustomer := &models.SysCustomer{
+		Num:         num,
+		Name:        strings.TrimSpace(req.Name),
+		Mobile:      mobile,
+		MdMobile:    s.buildMobileHash(mobile),
+		MoneyDemand: req.MoneyDemand,
+		ChannelID:   req.ChannelID,
+		Extra:       extra,
+		AllotTime:   time.Now(),
+		Remarks:     strings.TrimSpace(req.Remarks),
+	}
+
+	selectedFields := []string{"Num", "Name", "Mobile", "MdMobile", "MoneyDemand", "ChannelID", "Extra", "Remarks"}
+	currentUserID := common.GetCurrentUserID(c)
+	if currentUserID > 0 {
+		sysCustomer.UserID = int(currentUserID)
+		selectedFields = appendSelectedField(selectedFields, "UserID")
+	}
+
+	if tenantID := common.GetCurrentTenantID(c); tenantID > 0 {
+		sysCustomer.TenantID = int(tenantID)
+		selectedFields = appendSelectedField(selectedFields, "TenantID")
+	}
+
+	if req.CustomerStar != nil {
+		sysCustomer.CustomerStar = req.CustomerStar
+		selectedFields = appendSelectedField(selectedFields, "CustomerStar")
+	}
+
+	if req.Status != nil {
+		sysCustomer.Status = *req.Status
+		selectedFields = appendSelectedField(selectedFields, "Status")
+	}
+
+	if req.Intention != nil {
+		sysCustomer.Intention = *req.Intention
+		selectedFields = appendSelectedField(selectedFields, "Intention")
+	}
+
+	if req.Sex != nil {
+		sysCustomer.Sex = *req.Sex
+		selectedFields = appendSelectedField(selectedFields, "Sex")
+	}
+
+	if req.Age != nil {
+		sysCustomer.Age = *req.Age
+		selectedFields = appendSelectedField(selectedFields, "Age")
+	}
+
+	if req.From != nil {
+		sysCustomer.From = *req.From
+	} else {
+		sysCustomer.From = customerDefaultFrom
+	}
+	selectedFields = appendSelectedField(selectedFields, "From")
+
+	if req.DeptID != nil && *req.DeptID > 0 {
+		sysCustomer.DeptID = *req.DeptID
+		selectedFields = appendSelectedField(selectedFields, "DeptID")
+	} else if currentUserID > 0 {
+		deptID, deptErr := s.getCurrentUserDeptID(c, currentUserID)
+		if deptErr != nil {
+			return nil, deptErr
+		}
+		if deptID > 0 {
+			sysCustomer.DeptID = deptID
+			selectedFields = appendSelectedField(selectedFields, "DeptID")
+		}
+	}
+
+	if err := app.DB().WithContext(c).Select(selectedFields).Create(sysCustomer).Error; err != nil {
 		return nil, err
 	}
 
@@ -84,7 +209,9 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 	sysCustomer.Mobile = req.Mobile
 	sysCustomer.MoneyDemand = req.MoneyDemand
 	sysCustomer.ChannelID = req.ChannelID
-	sysCustomer.CustomerStar = req.CustomerStar
+	if req.CustomerStar != nil {
+		sysCustomer.CustomerStar = req.CustomerStar
+	}
 	sysCustomer.Status = req.Status
 	sysCustomer.Intention = req.Intention
 	sysCustomer.Extra = req.Extra
