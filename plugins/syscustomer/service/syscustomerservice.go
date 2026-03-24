@@ -66,6 +66,18 @@ func (s *SysCustomerService) getCurrentUserDeptID(c *gin.Context, userID uint) (
 	return int(user.DeptID), nil
 }
 
+func (s *SysCustomerService) getTenantCityByID(c *gin.Context, tenantID uint) (string, error) {
+	var tenant appModels.Tenant
+	err := app.DB().WithContext(c).Select("city").Where("id = ?", tenantID).First(&tenant).Error
+	if err == gorm.ErrRecordNotFound {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(tenant.City), nil
+}
+
 func (s *SysCustomerService) normalizeCreateExtra(extra string) (string, error) {
 	extra = strings.TrimSpace(extra)
 	if extra == "" {
@@ -144,6 +156,15 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	if tenantID := common.GetCurrentTenantID(c); tenantID > 0 {
 		sysCustomer.TenantID = int(tenantID)
 		selectedFields = appendSelectedField(selectedFields, "TenantID")
+
+		city, cityErr := s.getTenantCityByID(c, tenantID)
+		if cityErr != nil {
+			return nil, cityErr
+		}
+		if city != "" {
+			sysCustomer.City = city
+			selectedFields = appendSelectedField(selectedFields, "City")
+		}
 	}
 
 	if req.CustomerStar != nil {
