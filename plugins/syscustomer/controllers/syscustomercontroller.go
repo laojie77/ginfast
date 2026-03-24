@@ -104,12 +104,12 @@ func (c *SysCustomerController) List(ctx *gin.Context) {
 
 // Update 更新sys_customer
 func (c *SysCustomerController) UpdateCustomerStatusTrace(ctx *gin.Context) {
-	var req models.CustomerStatusTracesUpdateRequest
+	var req models.CustomerQuickStatusUpdateRequest
 	if err := req.Validate(ctx); err != nil {
 		c.FailAndAbort(ctx, err.Error(), err)
 	}
 	req.UserID = int(common.GetCurrentUserID(ctx))
-	err := c.SysCustomerService.CustomerStatusTracesUpdate(ctx, req)
+	err := c.SysCustomerService.CustomerQuickStatusUpdate(ctx, req)
 	if err != nil {
 		c.FailAndAbort(ctx, "更新客户状态失败", err)
 	}

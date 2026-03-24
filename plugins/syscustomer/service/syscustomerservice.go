@@ -1,20 +1,22 @@
 package service
 
 import (
+	"encoding/json"
+	"strings"
+
 	"gin-fast/app/global/app"
 	"gin-fast/app/utils/common"
 	"gin-fast/app/utils/datascope"
 	"gin-fast/app/utils/tenanthelper"
 	"gin-fast/plugins/syscustomer/models"
+	traceModels "gin-fast/plugins/syscustomertraces/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// SysCustomerService sys_customer服务
 type SysCustomerService struct{}
 
-// NewSysCustomerService 创建sys_customer服务
 func NewSysCustomerService() *SysCustomerService {
 	return &SysCustomerService{}
 }
@@ -49,9 +51,7 @@ func (s *SysCustomerService) getScopedCustomerByID(c *gin.Context, id int) (*mod
 	return sysCustomer, nil
 }
 
-// Create 创建sys_customer
 func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreateRequest) (*models.SysCustomer, error) {
-	// 创建sys_customer记录
 	sysCustomer := models.NewSysCustomer()
 	sysCustomer.Name = req.Name
 	sysCustomer.Mobile = req.Mobile
@@ -67,7 +67,6 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 {
 		sysCustomer.UserID = int(currentUserID)
 	}
-	// 保存到数据库
 	if err := sysCustomer.Create(c); err != nil {
 		return nil, err
 	}
@@ -75,14 +74,12 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	return sysCustomer, nil
 }
 
-// Update 更新sys_customer
 func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdateRequest) error {
-	// 查找sys_customer记录
 	sysCustomer, err := s.getScopedCustomerByID(c, req.Id)
 	if err != nil {
 		return err
 	}
-	// 更新sys_customer信息
+
 	sysCustomer.Name = req.Name
 	sysCustomer.Mobile = req.Mobile
 	sysCustomer.MoneyDemand = req.MoneyDemand
@@ -96,22 +93,18 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 	sysCustomer.Age = req.Age
 	sysCustomer.IsLock = req.IsLock
 	sysCustomer.SinglePieceType = req.SinglePieceType
-	// 保存到数据库
 	if err := sysCustomer.Update(c); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Delete 删除sys_customer
 func (s *SysCustomerService) Delete(c *gin.Context, id int) error {
-	// 查找sys_customer记录
 	sysCustomer, err := s.getScopedCustomerByID(c, id)
 	if err != nil {
 		return err
 	}
 
-	// 删除数据库记录
 	if err := sysCustomer.Delete(c); err != nil {
 		return err
 	}
@@ -119,14 +112,11 @@ func (s *SysCustomerService) Delete(c *gin.Context, id int) error {
 	return nil
 }
 
-// GetByID 根据ID获取sys_customer
 func (s *SysCustomerService) GetByID(c *gin.Context, id int) (*models.SysCustomer, error) {
 	return s.getScopedCustomerByID(c, id)
 }
 
-// List sys_customer列表（分页查询）
 func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerList, int64, error) {
-	// 获取总数
 	sysCustomerList := models.NewSysCustomerList()
 	scopes := []func(*gorm.DB) *gorm.DB{req.Handle()}
 	scopes = append(scopes, datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c))
@@ -135,7 +125,7 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 		return nil, 0, err
 	}
 	scopes = append(scopes, req.Paginate())
-	// 获取分页数据
+
 	err = app.DB().WithContext(c).
 		Model(&models.SysCustomer{}).
 		Preload("CustomerTracesList", s.customerTracesPreload(c)).
@@ -148,19 +138,79 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 	return sysCustomerList, total, nil
 }
 
-// 更新
-func (s *SysCustomerService) CustomerStatusTracesUpdate(c *gin.Context, req models.CustomerStatusTracesUpdateRequest) error {
-	// 查找sys_customer记录
-	sysCustomer, err := s.getScopedCustomerByID(c, req.CustomerID)
+func (s *SysCustomerService) CustomerQuickStatusUpdate(c *gin.Context, req models.CustomerQuickStatusUpdateRequest) error {
+	sysCustomer, err := s.getScopedCustomerByID(c, int(req.CustomerID))
 	if err != nil {
 		return err
 	}
-	if c.CustomerStar != sysCustomer.CustomerStar {
-		req.Data = "星级状态变更：" + sysCustomer.CustomerStar + "->" + c.CustomerStar + "星"
+
+	updates := map[string]interface{}{}
+	extraObj := map[string]interface{}{}
+	extraChanged := false
+
+	if req.Status != nil {
+		updates["status"] = *req.Status
 	}
-	// 保存到数据库
-	if err := sysCustomer.UpdateCustomerStatusTrace(c); err != nil {
-		return err
+	if req.Intention != nil {
+		updates["intention"] = *req.Intention
 	}
-	return nil
+	if req.CustomerStar != nil {
+		updates["customer_star"] = *req.CustomerStar
+	}
+
+	if req.ProgressRemark != nil || req.IntentionValidID != nil {
+		if strings.TrimSpace(sysCustomer.Extra) != "" {
+			if err := json.Unmarshal([]byte(sysCustomer.Extra), &extraObj); err != nil {
+				extraObj = map[string]interface{}{}
+			}
+		}
+	}
+
+	if req.ProgressRemark != nil {
+		progressRemark := strings.TrimSpace(*req.ProgressRemark)
+		if progressRemark == "" {
+			delete(extraObj, models.ProgressRemark)
+		} else {
+			extraObj[models.ProgressRemark] = progressRemark
+		}
+		extraChanged = true
+	}
+
+	if req.IntentionValidID != nil {
+		if *req.IntentionValidID > 0 {
+			extraObj[models.IntentionValidId] = *req.IntentionValidID
+		} else {
+			delete(extraObj, models.IntentionValidId)
+		}
+		extraChanged = true
+	}
+
+	if extraChanged {
+		extraBytes, err := json.Marshal(extraObj)
+		if err != nil {
+			return err
+		}
+		updates["extra"] = string(extraBytes)
+	}
+
+	return app.DB().WithContext(c).Transaction(func(tx *gorm.DB) error {
+		if len(updates) > 0 {
+			if err := tx.Model(&models.SysCustomer{}).Where("id = ?", sysCustomer.Id).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+
+		traceData := strings.TrimSpace(req.Data)
+		if traceData == "" {
+			return nil
+		}
+
+		trace := traceModels.SysCustomerTraces{
+			CustomerID: int64(sysCustomer.Id),
+			UserID:     req.UserID,
+			Data:       traceData,
+		}
+
+		return tx.Create(&trace).Error
+	})
 }

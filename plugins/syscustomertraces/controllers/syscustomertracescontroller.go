@@ -2,11 +2,13 @@ package controllers
 
 import (
 	"gin-fast/app/controllers"
+	"gin-fast/app/global/app"
 	"gin-fast/app/utils/common"
+	customerModels "gin-fast/plugins/syscustomer/models"
 	"gin-fast/plugins/syscustomertraces/models"
 	"gin-fast/plugins/syscustomertraces/service"
-
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // SysCustomerTracesController sys_customer_traces控制器
@@ -28,12 +30,8 @@ func (c *SysCustomerTracesController) Create(ctx *gin.Context) {
 	if err := req.Validate(ctx); err != nil {
 		c.FailAndAbort(ctx, err.Error(), err)
 	}
-
-	// 如果UserId为0，则使用当前登录用户ID
-	if req.UserID == 0 {
-		req.UserID = int(common.GetCurrentUserID(ctx))
-	}
-
+	// 如果UserId不等于当前登录ID，则使用当前登录用户ID
+	
 	sysCustomerTraces, err := c.SysCustomerTracesService.Create(ctx, req)
 	if err != nil {
 		c.FailAndAbort(ctx, "创建sys_customer_traces失败", err)

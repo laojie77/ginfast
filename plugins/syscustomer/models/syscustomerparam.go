@@ -224,3 +224,19 @@ type CustomerStatusTracesUpdateRequest struct {
 func (r *CustomerStatusTracesUpdateRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
 }
+
+type CustomerQuickStatusUpdateRequest struct {
+	models.Validator
+	CustomerID       int64   `json:"customerId" form:"customerId" validate:"required" message:"瀹㈡埛ID涓嶈兘涓虹┖"`
+	UserID           int     `json:"userId" form:"userId"`
+	Data             string  `json:"data" form:"data"`
+	Status           *int    `json:"status" form:"status"`
+	Intention        *int    `json:"intention" form:"intention"`
+	CustomerStar     *int    `json:"customerStar" form:"customerStar"`
+	ProgressRemark   *string `json:"progressRemark" form:"progressRemark"`
+	IntentionValidID *int    `json:"intentionValidId" form:"intentionValidId"`
+}
+
+func (r *CustomerQuickStatusUpdateRequest) Validate(c *gin.Context) error {
+	return r.Validator.Check(c, r)
+}
