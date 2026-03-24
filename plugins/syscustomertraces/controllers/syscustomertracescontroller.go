@@ -1,12 +1,17 @@
 package controllers
 
 import (
+	"fmt"
+	"time"
+
 	"gin-fast/app/controllers"
 	"gin-fast/app/global/app"
+	appModels "gin-fast/app/models"
 	"gin-fast/app/utils/common"
 	customerModels "gin-fast/plugins/syscustomer/models"
 	"gin-fast/plugins/syscustomertraces/models"
 	"gin-fast/plugins/syscustomertraces/service"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -29,12 +34,50 @@ func (c *SysCustomerTracesController) Create(ctx *gin.Context) {
 	var req models.SysCustomerTracesCreateRequest
 	if err := req.Validate(ctx); err != nil {
 		c.FailAndAbort(ctx, err.Error(), err)
+		return
 	}
-	// 如果UserId不等于当前登录ID，则使用当前登录用户ID
-	
-	sysCustomerTraces, err := c.SysCustomerTracesService.Create(ctx, req)
+
+	currentUserID := common.GetCurrentUserID(ctx)
+	requestUserID := req.UserID
+	isSameUser := currentUserID > 0 && requestUserID == int(currentUserID)
+	now := time.Now()
+	sysCustomerTraces := models.NewSysCustomerTraces()
+
+	err := app.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if currentUserID > 0 {
+			req.UserID = int(currentUserID)
+		}
+		sysCustomerTraces.CustomerID = req.CustomerID
+		sysCustomerTraces.UserID = req.UserID
+		sysCustomerTraces.Data = req.Data
+
+		if err := tx.Create(sysCustomerTraces).Error; err != nil {
+			return err
+		}
+
+		updates := map[string]interface{}{}
+		if isSameUser {
+			updates["remark_time"] = now
+		} else if currentUserID > 0 {
+			userName := "System"
+			currentUser := appModels.NewUser()
+			if err := currentUser.GetUserByID(ctx, currentUserID); err == nil {
+				userName = currentUser.NickName
+			}
+			updates["customer_comment"] = fmt.Sprintf("%s - %s - %s", now.Format("2006-01-02 15:04:05"), userName, req.Data)
+		}
+
+		if len(updates) == 0 {
+			return nil
+		}
+
+		return tx.Model(&customerModels.SysCustomer{}).
+			Where("id = ?", req.CustomerID).
+			Updates(updates).Error
+	})
 	if err != nil {
-		c.FailAndAbort(ctx, "创建sys_customer_traces失败", err)
+		c.FailAndAbort(ctx, "创建客户跟进失败", err)
+		return
 	}
 
 	c.Success(ctx, gin.H{
