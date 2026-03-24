@@ -63,6 +63,7 @@ type SysCustomer struct {
 
 // SysCustomerList sys_customer 列表
 type SysCustomerList []SysCustomer
+type CustomerStatusTraces struct{}
 
 // NewSysCustomer 创建 sys_customer 实例
 func NewSysCustomer() *SysCustomer {
@@ -121,4 +122,8 @@ func (l *SysCustomerList) GetTotal(c context.Context, query ...func(*gorm.DB) *g
 	var count int64
 	err := app.DB().WithContext(c).Model(&SysCustomer{}).Scopes(query...).Count(&count).Error
 	return count, err
+}
+
+func (l *SysCustomer) UpdateCustomerStatusTrace(c context.Context) error {
+	return app.DB().WithContext(c).Updates(l).Error
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"gin-fast/app/controllers"
+	"gin-fast/app/utils/common"
 	"gin-fast/plugins/syscustomer/models"
 	"gin-fast/plugins/syscustomer/service"
 
@@ -27,7 +28,7 @@ func (c *SysCustomerController) Create(ctx *gin.Context) {
 	if err := req.Validate(ctx); err != nil {
 		c.FailAndAbort(ctx, err.Error(), err)
 	}
-	
+
 	sysCustomer, err := c.SysCustomerService.Create(ctx, req)
 	if err != nil {
 		c.FailAndAbort(ctx, "创建sys_customer失败", err)
@@ -99,4 +100,19 @@ func (c *SysCustomerController) List(ctx *gin.Context) {
 		"list":  sysCustomerList,
 		"total": total,
 	})
+}
+
+// Update 更新sys_customer
+func (c *SysCustomerController) UpdateCustomerStatusTrace(ctx *gin.Context) {
+	var req models.CustomerStatusTracesUpdateRequest
+	if err := req.Validate(ctx); err != nil {
+		c.FailAndAbort(ctx, err.Error(), err)
+	}
+	req.UserID = int(common.GetCurrentUserID(ctx))
+	err := c.SysCustomerService.CustomerStatusTracesUpdate(ctx, req)
+	if err != nil {
+		c.FailAndAbort(ctx, "更新客户状态失败", err)
+	}
+
+	c.SuccessWithMessage(ctx, "更新成功")
 }

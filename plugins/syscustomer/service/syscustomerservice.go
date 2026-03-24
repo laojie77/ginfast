@@ -147,3 +147,20 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 
 	return sysCustomerList, total, nil
 }
+
+// 更新
+func (s *SysCustomerService) CustomerStatusTracesUpdate(c *gin.Context, req models.CustomerStatusTracesUpdateRequest) error {
+	// 查找sys_customer记录
+	sysCustomer, err := s.getScopedCustomerByID(c, req.CustomerID)
+	if err != nil {
+		return err
+	}
+	if c.CustomerStar != sysCustomer.CustomerStar {
+		req.Data = "星级状态变更：" + sysCustomer.CustomerStar + "->" + c.CustomerStar + "星"
+	}
+	// 保存到数据库
+	if err := sysCustomer.UpdateCustomerStatusTrace(c); err != nil {
+		return err
+	}
+	return nil
+}

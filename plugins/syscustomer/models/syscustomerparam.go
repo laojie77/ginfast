@@ -211,3 +211,16 @@ type SysCustomerGetByIDRequest struct {
 func (r *SysCustomerGetByIDRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
 }
+
+type CustomerStatusTracesUpdateRequest struct {
+	models.Validator
+	CustomerID   int64  `form:"id" validate:"required" message:"客户ID不能为空"` // 客户
+	UserID       int    `form:"userId"`                                    // 操作用户
+	Data         string `form:"data" `                                     // 跟进内容
+	CustomerStar string `form:"customerStar"`                              // 星级
+}
+
+// Validate 验证请求参数
+func (r *CustomerStatusTracesUpdateRequest) Validate(c *gin.Context) error {
+	return r.Validator.Check(c, r)
+}
