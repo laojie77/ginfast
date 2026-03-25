@@ -146,7 +146,7 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 		Remarks:     strings.TrimSpace(req.Remarks),
 	}
 
-	selectedFields := []string{"Num", "Name", "Mobile", "MdMobile", "MoneyDemand", "ChannelID", "Extra", "Remarks"}
+	selectedFields := []string{"Num", "Name", "Mobile", "MdMobile", "MoneyDemand", "ChannelID", "Extra", "AllotTime", "Remarks"}
 	currentUserID := common.GetCurrentUserID(c)
 	if currentUserID > 0 {
 		sysCustomer.UserID = int(currentUserID)
@@ -226,8 +226,15 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 		return err
 	}
 
-	sysCustomer.Name = req.Name
-	sysCustomer.Mobile = req.Mobile
+	mobile := s.normalizeMobile(req.Mobile)
+	extra, err := s.normalizeCreateExtra(req.Extra)
+	if err != nil {
+		return err
+	}
+
+	sysCustomer.Name = strings.TrimSpace(req.Name)
+	sysCustomer.Mobile = mobile
+	sysCustomer.MdMobile = s.buildMobileHash(mobile)
 	sysCustomer.MoneyDemand = req.MoneyDemand
 	sysCustomer.ChannelID = req.ChannelID
 	if req.CustomerStar != nil {
@@ -235,9 +242,9 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 	}
 	sysCustomer.Status = req.Status
 	sysCustomer.Intention = req.Intention
-	sysCustomer.Extra = req.Extra
+	sysCustomer.Extra = extra
 	sysCustomer.Sex = req.Sex
-	sysCustomer.Remarks = req.Remarks
+	sysCustomer.Remarks = strings.TrimSpace(req.Remarks)
 	sysCustomer.Age = req.Age
 	sysCustomer.IsLock = req.IsLock
 	sysCustomer.SinglePieceType = req.SinglePieceType

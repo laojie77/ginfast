@@ -1,12 +1,25 @@
 package models
 
 import (
+	"errors"
 	"gin-fast/app/models"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+var customerMobilePattern = regexp.MustCompile(`^1[3-9]\d{9}$`)
+
+func normalizeCustomerMobile(mobile string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(mobile)), "")
+}
+
+func isValidCustomerMobile(mobile string) bool {
+	return customerMobilePattern.MatchString(normalizeCustomerMobile(mobile))
+}
 
 const (
 	ExtraPropertyOccupation      = "occupation"
@@ -160,7 +173,16 @@ type SysCustomerCreateRequest struct {
 
 // Validate 验证请求参数
 func (r *SysCustomerCreateRequest) Validate(c *gin.Context) error {
-	return r.Validator.Check(c, r)
+	if err := r.Validator.Check(c, r); err != nil {
+		return err
+	}
+
+	r.Mobile = normalizeCustomerMobile(r.Mobile)
+	if !isValidCustomerMobile(r.Mobile) {
+		return errors.New("手机号格式不正确")
+	}
+
+	return nil
 }
 
 // SysCustomerUpdateRequest 更新 sys_customer 请求参数
@@ -187,7 +209,16 @@ type SysCustomerUpdateRequest struct {
 
 // Validate 验证请求参数
 func (r *SysCustomerUpdateRequest) Validate(c *gin.Context) error {
-	return r.Validator.Check(c, r)
+	if err := r.Validator.Check(c, r); err != nil {
+		return err
+	}
+
+	r.Mobile = normalizeCustomerMobile(r.Mobile)
+	if !isValidCustomerMobile(r.Mobile) {
+		return errors.New("手机号格式不正确")
+	}
+
+	return nil
 }
 
 // SysCustomerDeleteRequest 删除 sys_customer 请求参数
