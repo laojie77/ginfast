@@ -29,7 +29,7 @@ type SysCustomer struct {
 	Extra              string                          `gorm:"column:extra;type:json" json:"extra"`
 	SinglePieceType    int                             `gorm:"column:single_piece_type" json:"singlePieceType"`
 	Sex                int                             `gorm:"column:sex;not null;default:2" json:"sex"`
-	AllotTime          time.Time                       `gorm:"column:allot_time" json:"allotTime"`
+	AllotTime          *time.Time                      `gorm:"column:allot_time" json:"allotTime"`
 	DeptID             int                             `gorm:"column:dept_id;index" json:"deptId"`
 	TenantID           int                             `gorm:"column:tenant_id" json:"tenantId"`
 	Remarks            string                          `gorm:"column:remarks" json:"remarks"`

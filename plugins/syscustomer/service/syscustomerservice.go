@@ -133,7 +133,7 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 			return nil, err
 		}
 	}
-
+	now := time.Now()
 	sysCustomer := &models.SysCustomer{
 		Num:         num,
 		Name:        strings.TrimSpace(req.Name),
@@ -142,7 +142,7 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 		MoneyDemand: req.MoneyDemand,
 		ChannelID:   req.ChannelID,
 		Extra:       extra,
-		AllotTime:   time.Now(),
+		AllotTime:   &now,
 		Remarks:     strings.TrimSpace(req.Remarks),
 	}
 
