@@ -154,8 +154,8 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	}
 
 	if tenantID := common.GetCurrentTenantID(c); tenantID > 0 {
-		sysCustomer.TenantID = int(tenantID)
-		selectedFields = appendSelectedField(selectedFields, "TenantID")
+		//sysCustomer.TenantID = int(tenantID)
+		//selectedFields = appendSelectedField(selectedFields, "TenantID")
 
 		city, cityErr := s.getTenantCityByID(c, tenantID)
 		if cityErr != nil {
