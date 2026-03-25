@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var customerMobilePattern = regexp.MustCompile(`^1[3-9]\d{9}$`)
@@ -22,18 +23,30 @@ func isValidCustomerMobile(mobile string) bool {
 }
 
 const (
-	ExtraPropertyOccupation      = "occupation"
-	ExtraPropertyHouse           = "house"
-	ExtraPropertyCar             = "car"
-	ExtraPropertyCreditCard      = "creditcard"
-	ExtraPropertyInsurance       = "insurance"
-	ExtraPropertyHouseFund       = "housefund"
+	//职业
+	ExtraPropertyOccupation = "occupation"
+	//房产
+	ExtraPropertyHouse = "house"
+	//车产
+	ExtraPropertyCar = "car"
+	//信用卡
+	ExtraPropertyCreditCard = "creditcard"
+	//商业保险
+	ExtraPropertyInsurance = "insurance"
+	//公积金
+	ExtraPropertyHouseFund = "housefund"
+	//社保
 	ExtraPropertySocialInsurance = "socialinsurance"
-	ExtraPropertyZhimaScore      = "zhimascore"
-	ExtraPropertySalaryMoney     = "salarymoney"
-	ExtraPropertyEducation       = "education"
-	ProgressRemark               = "progress_remark"
-	IntentionValidId             = "intention_valid_id"
+	//芝麻分
+	ExtraPropertyZhimaScore = "zhimascore"
+	//月薪
+	ExtraPropertySalaryMoney = "salarymoney"
+	//学历
+	ExtraPropertyEducation = "education"
+	//上级评价
+	ProgressRemark = "progress_remark"
+	//客户有效二级状态
+	IntentionValidId = "intention_valid_id"
 )
 
 var AllExtraProperties = []string{
@@ -62,10 +75,35 @@ var ExtraPropertyLabels = map[string]string{
 	ExtraPropertyEducation:       "学历",
 }
 
+const (
+	// 客户列表场景：全部客户（默认排除公共池、待流转、锁定）。
+	CustomerListSceneAll = "all"
+	// 客户列表场景：当前登录用户自己的客户。
+	CustomerListSceneMy = "my"
+	// 客户列表场景：公共池客户。
+	CustomerListScenePublic = "public"
+	// 客户列表场景：待流转客户。
+	CustomerListSceneExchange = "exchange"
+	// 客户列表场景：当前登录用户名下的再分配客户。
+	CustomerListSceneReassign = "reassign"
+	// 客户列表场景：当前登录用户名下的锁定客户。
+	CustomerListSceneLocked = "locked"
+	// 无效客户
+	CustomerListSceneIntention2 = "intention2"
+	// 黑名单客户
+	CustomerListSceneIntention3 = "intention3"
+	//待处理客户
+	CustomerListSceneStatus0 = "status0"
+)
+
 // SysCustomerListRequest sys_customer 列表请求参数
+// SysCustomerListRequest 客户列表查询参数。
 type SysCustomerListRequest struct {
 	models.BasePaging
 	models.Validator
+	// Scene 列表场景，不同场景会带出不同的默认过滤条件。
+	Scene *string `form:"scene"`
+	// 以下字段为显式查询条件；一旦前端传值，优先级高于场景默认条件。
 	Num             *string    `form:"num"`
 	Name            *string    `form:"name"`
 	Mobile          *string    `form:"mobile"`
@@ -80,15 +118,122 @@ type SysCustomerListRequest struct {
 	DeptID          *int       `form:"deptId"`
 	City            *string    `form:"city"`
 	IsReassign      *int       `form:"isReassign"`
+	IsPublic        *int       `form:"isPublic"`
 	IsQuit          *int       `form:"isQuit"`
 	IsRepeat        *int       `form:"isRepeat"`
 	StarStatus      *int       `form:"starStatus"`
+	IsExchange      *int       `form:"isExchange"`
 	IsLock          *int       `form:"isLock"`
+	IsRead          *int       `form:"isRead"`
 }
 
 // Validate 验证请求参数
+// Validate 校验客户列表查询参数。
 func (r *SysCustomerListRequest) Validate(c *gin.Context) error {
 	return r.Validator.Check(c, r)
+}
+
+// getScene 统一读取并标准化场景值，避免大小写和空格影响判断。
+func (r *SysCustomerListRequest) getScene() string {
+	if r.Scene == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(*r.Scene))
+}
+
+// applyCustomerListDefaultIntFilter 仅在前端未显式传值时，补充场景默认条件。
+var customerListAllowedOperators = map[string]struct{}{
+	"=":  {},
+	"!=": {},
+	">":  {},
+	">=": {},
+	"<":  {},
+	"<=": {},
+}
+
+// applyCustomerListDefaultIntFilter only applies the scene default when the caller
+// does not explicitly provide a value. The operator defaults to "=".
+func applyCustomerListDefaultIntFilter(db *gorm.DB, field string, value int, current *int, operators ...string) *gorm.DB {
+	if current != nil {
+		return db
+	}
+
+	operator := "="
+	if len(operators) > 0 {
+		candidate := strings.TrimSpace(operators[0])
+		if _, ok := customerListAllowedOperators[candidate]; ok {
+			operator = candidate
+		}
+	}
+
+	switch operator {
+	case "!=":
+		return db.Where(clause.Neq{Column: field, Value: value})
+	case ">":
+		return db.Where(clause.Gt{Column: field, Value: value})
+	case ">=":
+		return db.Where(clause.Gte{Column: field, Value: value})
+	case "<":
+		return db.Where(clause.Lt{Column: field, Value: value})
+	case "<=":
+		return db.Where(clause.Lte{Column: field, Value: value})
+	default:
+		return db.Where(clause.Eq{Column: field, Value: value})
+	}
+}
+
+// ApplyListScene 根据列表场景补充默认过滤条件。
+// userID 是当前登录用户 ID，供“我的客户 / 再分配 / 锁定”等场景追加默认 user_id 条件。
+// 如果前端显式传了 userId、isLock、isReassign 等参数，则以显式参数为准，不再套用默认场景值。
+func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.DB {
+	switch r.getScene() {
+	case CustomerListSceneAll:
+		// 全部客户默认排除公共池、待流转、锁定客户。
+		db = applyCustomerListDefaultIntFilter(db, "is_public", 0, r.IsPublic)
+		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
+		db = applyCustomerListDefaultIntFilter(db, "is_lock", 0, r.IsLock)
+		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "!=")
+	case CustomerListSceneMy:
+		// 我的客户场景本身不额外限制状态，只在下方补充当前登录人的 user_id。
+		db = applyCustomerListDefaultIntFilter(db, "is_public", 0, r.IsPublic)
+		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
+		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 0, r.IsReassign)
+		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "!=")
+		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Status, "!=")
+	case CustomerListScenePublic:
+		//公共池客户
+		db = applyCustomerListDefaultIntFilter(db, "is_public", 1, r.IsPublic)
+	case CustomerListSceneExchange:
+		//带流转客户
+		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 1, r.IsExchange)
+	case CustomerListSceneReassign:
+		//再分配客户
+		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 1, r.IsReassign)
+	case CustomerListSceneLocked:
+		//锁定客户
+		db = applyCustomerListDefaultIntFilter(db, "is_lock", 1, r.IsLock)
+	case CustomerListSceneIntention2:
+		//无效客户
+		db = applyCustomerListDefaultIntFilter(db, "intention", 2, r.Intention)
+	case CustomerListSceneIntention3:
+		//黑名单
+		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention)
+	case CustomerListSceneStatus0:
+		//待处理客户
+		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Status)
+	}
+
+	if r.UserID != nil || userID <= 0 {
+		return db
+	}
+
+	switch r.getScene() {
+	case CustomerListSceneMy, CustomerListSceneReassign, CustomerListSceneLocked, CustomerListSceneStatus0:
+		// 这些场景默认只看当前登录用户名下的数据。
+		db = db.Where("user_id = ?", userID)
+	}
+
+	return db
 }
 
 // Handle 获取查询条件
@@ -144,9 +289,6 @@ func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 		}
 		if r.StarStatus != nil {
 			db = db.Where("star_status = ?", *r.StarStatus)
-		}
-		if r.IsLock != nil {
-			db = db.Where("is_lock = ?", *r.IsLock)
 		}
 		return db
 	}

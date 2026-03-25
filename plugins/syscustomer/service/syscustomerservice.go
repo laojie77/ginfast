@@ -273,7 +273,14 @@ func (s *SysCustomerService) GetByID(c *gin.Context, id int) (*models.SysCustome
 
 func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerList, int64, error) {
 	sysCustomerList := models.NewSysCustomerList()
-	scopes := []func(*gorm.DB) *gorm.DB{req.Handle()}
+	currentUserID := int(common.GetCurrentUserID(c))
+	scopes := []func(*gorm.DB) *gorm.DB{
+		req.Handle(),
+		func(db *gorm.DB) *gorm.DB {
+			// 场景默认条件依赖当前登录用户，因此在 service 层把 userID 注入给 request。
+			return req.ApplyListScene(db, currentUserID)
+		},
+	}
 	scopes = append(scopes, datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c))
 	total, err := sysCustomerList.GetTotal(c, scopes...)
 	if err != nil {
