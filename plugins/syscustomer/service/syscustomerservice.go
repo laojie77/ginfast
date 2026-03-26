@@ -286,7 +286,7 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 			return req.ApplyListScene(db, currentUserID)
 		},
 	}
-	scopes = append(scopes, datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c))
+	scopes = append(scopes, req.ApplyDefaultOrder, datascope.GetDataScopeUser(c), tenanthelper.TenantScope(c))
 	total, err := sysCustomerList.GetTotal(c, scopes...)
 	if err != nil {
 		return nil, 0, err

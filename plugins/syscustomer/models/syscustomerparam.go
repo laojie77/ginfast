@@ -237,6 +237,19 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 }
 
 // Handle 获取查询条件
+// ApplyDefaultOrder applies the customer list default sort when the caller
+// does not provide an explicit order. The latest assignment-related time wins.
+func (r *SysCustomerListRequest) ApplyDefaultOrder(db *gorm.DB) *gorm.DB {
+	if strings.TrimSpace(r.Order) != "" {
+		return db
+	}
+
+	return db.
+		Order("GREATEST(COALESCE(redistribution_time, '1000-01-01 00:00:00'), COALESCE(allot_time, '1000-01-01 00:00:00')) DESC").
+		Order("id DESC")
+}
+
+// Handle 获取查询条件
 func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
 		if r.Num != nil {
