@@ -46,7 +46,6 @@ type SysCustomer struct {
 	IsQuit             int                             `gorm:"column:is_quit" json:"isQuit"`
 	IsRepeat           int                             `gorm:"column:is_repeat" json:"isRepeat"`
 	IsRubbish          int                             `gorm:"column:is_rubbish" json:"isRubbish"`
-	RemarkTime         *time.Time                      `gorm:"column:remark_time" json:"remarkTime"`
 	DispatchTime       *time.Time                      `gorm:"column:dispatch_time" json:"dispatchTime"`
 	IsRemind           int                             `gorm:"column:is_remind" json:"isRemind"`
 	IsSms              int                             `gorm:"column:is_sms;default:0" json:"isSms"`

@@ -248,6 +248,11 @@ func (s *SysCustomerService) Update(c *gin.Context, req models.SysCustomerUpdate
 	sysCustomer.Age = req.Age
 	sysCustomer.IsLock = req.IsLock
 	sysCustomer.SinglePieceType = req.SinglePieceType
+
+	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 && sysCustomer.UserID == int(currentUserID) {
+		now := time.Now()
+		sysCustomer.LastTime = &now
+	}
 	if err := sysCustomer.Update(c); err != nil {
 		return err
 	}

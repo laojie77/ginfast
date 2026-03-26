@@ -57,7 +57,7 @@ func (c *SysCustomerTracesController) Create(ctx *gin.Context) {
 
 		updates := map[string]interface{}{}
 		if isSameUser {
-			updates["remark_time"] = now
+			updates["last_time"] = now
 		} else if currentUserID > 0 {
 			userName := "System"
 			currentUser := appModels.NewUser()
