@@ -311,6 +311,10 @@ func (s *SysCustomerService) CustomerQuickStatusUpdate(c *gin.Context, req model
 		return err
 	}
 
+	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 && sysCustomer.UserID != int(currentUserID) {
+		return fmt.Errorf("无权操作该客户")
+	}
+
 	updates := map[string]interface{}{}
 	extraObj := map[string]interface{}{}
 	extraChanged := false
@@ -323,6 +327,9 @@ func (s *SysCustomerService) CustomerQuickStatusUpdate(c *gin.Context, req model
 	}
 	if req.CustomerStar != nil {
 		updates["customer_star"] = *req.CustomerStar
+	}
+	if req.IsRead != nil {
+		updates["is_read"] = *req.IsRead
 	}
 
 	if req.ProgressRemark != nil || req.IntentionValidID != nil {

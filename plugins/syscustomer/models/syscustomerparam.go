@@ -419,6 +419,7 @@ type CustomerQuickStatusUpdateRequest struct {
 	Status           *int    `json:"status" form:"status"`
 	Intention        *int    `json:"intention" form:"intention"`
 	CustomerStar     *int    `json:"customerStar" form:"customerStar"`
+	IsRead           *int    `json:"isRead" form:"isRead"`
 	ProgressRemark   *string `json:"progressRemark" form:"progressRemark"`
 	IntentionValidID *int    `json:"intentionValidId" form:"intentionValidId"`
 }

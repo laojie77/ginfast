@@ -111,7 +111,7 @@ func (c *SysCustomerController) UpdateCustomerStatusTrace(ctx *gin.Context) {
 	req.UserID = int(common.GetCurrentUserID(ctx))
 	err := c.SysCustomerService.CustomerQuickStatusUpdate(ctx, req)
 	if err != nil {
-		c.FailAndAbort(ctx, "更新客户状态失败", err)
+		c.FailAndAbort(ctx, err.Error(), err)
 	}
 
 	c.SuccessWithMessage(ctx, "更新成功")
