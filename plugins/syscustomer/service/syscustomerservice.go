@@ -154,8 +154,9 @@ func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreate
 	}
 
 	if tenantID := common.GetCurrentTenantID(c); tenantID > 0 {
-		//sysCustomer.TenantID = int(tenantID)
-		//selectedFields = appendSelectedField(selectedFields, "TenantID")
+		// Create uses Select(selectedFields), so TenantID must be included explicitly here.
+		sysCustomer.TenantID = int(tenantID)
+		selectedFields = appendSelectedField(selectedFields, "TenantID")
 
 		city, cityErr := s.getTenantCityByID(c, tenantID)
 		if cityErr != nil {
@@ -311,9 +312,9 @@ func (s *SysCustomerService) CustomerQuickStatusUpdate(c *gin.Context, req model
 		return err
 	}
 
-	if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 && sysCustomer.UserID != int(currentUserID) {
-		return fmt.Errorf("无权操作该客户")
-	}
+	//if currentUserID := common.GetCurrentUserID(c); currentUserID > 0 && sysCustomer.UserID != int(currentUserID) {
+	//	return fmt.Errorf("无权操作该客户")
+	//}
 
 	updates := map[string]interface{}{}
 	extraObj := map[string]interface{}{}
