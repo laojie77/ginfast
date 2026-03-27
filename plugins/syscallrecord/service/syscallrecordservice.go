@@ -2,6 +2,7 @@ package service
 
 import (
 	"gin-fast/app/utils/common"
+	"gin-fast/app/utils/datascope"
 	"gin-fast/plugins/syscallrecord/models"
 
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,20 @@ func syscallRecordTenantScope(c *gin.Context) func(db *gorm.DB) *gorm.DB {
 	}
 }
 
+func (s *SysCallRecordService) getScopedCallRecordByID(c *gin.Context, id int) (*models.SysCallRecord, error) {
+	sysCallRecord := models.NewSysCallRecord()
+	err := sysCallRecord.GetByIDWithCustomer(
+		c,
+		id,
+		datascope.GetDataScopeByColumn(c, "sys_call_record.user_id"),
+		syscallRecordTenantScope(c),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return sysCallRecord, nil
+}
+
 func (s *SysCallRecordService) Create(c *gin.Context, req models.SysCallRecordCreateRequest) (*models.SysCallRecord, error) {
 	sysCallRecord := models.NewSysCallRecord()
 	if err := sysCallRecord.Create(c); err != nil {
@@ -34,8 +49,8 @@ func (s *SysCallRecordService) Create(c *gin.Context, req models.SysCallRecordCr
 }
 
 func (s *SysCallRecordService) Update(c *gin.Context, req models.SysCallRecordUpdateRequest) error {
-	sysCallRecord := models.NewSysCallRecord()
-	if err := sysCallRecord.GetByID(c, req.Id); err != nil {
+	sysCallRecord, err := s.getScopedCallRecordByID(c, req.Id)
+	if err != nil {
 		return err
 	}
 	if err := sysCallRecord.Update(c); err != nil {
@@ -45,8 +60,8 @@ func (s *SysCallRecordService) Update(c *gin.Context, req models.SysCallRecordUp
 }
 
 func (s *SysCallRecordService) Delete(c *gin.Context, id int) error {
-	sysCallRecord := models.NewSysCallRecord()
-	if err := sysCallRecord.GetByID(c, id); err != nil {
+	sysCallRecord, err := s.getScopedCallRecordByID(c, id)
+	if err != nil {
 		return err
 	}
 
@@ -58,17 +73,16 @@ func (s *SysCallRecordService) Delete(c *gin.Context, id int) error {
 }
 
 func (s *SysCallRecordService) GetByID(c *gin.Context, id int) (*models.SysCallRecord, error) {
-	sysCallRecord := models.NewSysCallRecord()
-	if err := sysCallRecord.GetByIDWithCustomer(c, id, syscallRecordTenantScope(c)); err != nil {
-		return nil, err
-	}
-
-	return sysCallRecord, nil
+	return s.getScopedCallRecordByID(c, id)
 }
 
 func (s *SysCallRecordService) List(c *gin.Context, req models.SysCallRecordListRequest) (*models.SysCallRecordList, int64, error) {
 	sysCallRecordList := models.NewSysCallRecordList()
-	scopes := []func(*gorm.DB) *gorm.DB{req.Handle(), syscallRecordTenantScope(c)}
+	scopes := []func(*gorm.DB) *gorm.DB{
+		req.Handle(),
+		datascope.GetDataScopeByColumn(c, "sys_call_record.user_id"),
+		syscallRecordTenantScope(c),
+	}
 	total, err := sysCallRecordList.GetTotalWithCustomer(c, scopes...)
 	if err != nil {
 		return nil, 0, err

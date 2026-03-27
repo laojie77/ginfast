@@ -218,7 +218,10 @@ func GetDataScope(c *gin.Context) func(db *gorm.DB) *gorm.DB {
 	return getDataScopeByColumn(c, "created_by")
 }
 
-// GetDataScopeUser 数据权限，默认按 user_id 过滤
-func GetDataScopeUser(c *gin.Context) func(db *gorm.DB) *gorm.DB {
-	return getDataScopeByColumn(c, "user_id")
+// 数据权限，默认按 user_id 过滤
+func GetDataScopeByColumn(c *gin.Context, column string) func(db *gorm.DB) *gorm.DB {
+	if column == "" {
+		column = "user_id"
+	}
+	return getDataScopeByColumn(c, column)
 }
