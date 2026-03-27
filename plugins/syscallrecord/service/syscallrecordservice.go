@@ -1,26 +1,31 @@
 package service
 
 import (
+	"gin-fast/app/utils/common"
 	"gin-fast/plugins/syscallrecord/models"
+
 	"github.com/gin-gonic/gin"
-    "gorm.io/gorm"
-	"gin-fast/app/utils/datascope"
-	"gin-fast/app/utils/tenanthelper"
+	"gorm.io/gorm"
 )
 
-// SysCallRecordService sys_call_record服务
 type SysCallRecordService struct{}
 
-// NewSysCallRecordService 创建sys_call_record服务
 func NewSysCallRecordService() *SysCallRecordService {
 	return &SysCallRecordService{}
 }
 
-// Create 创建sys_call_record
+func syscallRecordTenantScope(c *gin.Context) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		claims := common.GetClaims(c)
+		if claims != nil {
+			return db.Where("sys_call_record.tenant_id = ?", claims.TenantID)
+		}
+		return db.Where("1 = 0")
+	}
+}
+
 func (s *SysCallRecordService) Create(c *gin.Context, req models.SysCallRecordCreateRequest) (*models.SysCallRecord, error) {
-	// 创建sys_call_record记录
 	sysCallRecord := models.NewSysCallRecord()
-	// 保存到数据库
 	if err := sysCallRecord.Create(c); err != nil {
 		return nil, err
 	}
@@ -28,30 +33,23 @@ func (s *SysCallRecordService) Create(c *gin.Context, req models.SysCallRecordCr
 	return sysCallRecord, nil
 }
 
-// Update 更新sys_call_record
 func (s *SysCallRecordService) Update(c *gin.Context, req models.SysCallRecordUpdateRequest) error {
-	// 查找sys_call_record记录
 	sysCallRecord := models.NewSysCallRecord()
 	if err := sysCallRecord.GetByID(c, req.Id); err != nil {
 		return err
 	}
-	// 更新sys_call_record信息
-	// 保存到数据库
 	if err := sysCallRecord.Update(c); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Delete 删除sys_call_record
 func (s *SysCallRecordService) Delete(c *gin.Context, id int) error {
-	// 查找sys_call_record记录
 	sysCallRecord := models.NewSysCallRecord()
 	if err := sysCallRecord.GetByID(c, id); err != nil {
 		return err
 	}
 
-	// 删除数据库记录
 	if err := sysCallRecord.Delete(c); err != nil {
 		return err
 	}
@@ -59,31 +57,25 @@ func (s *SysCallRecordService) Delete(c *gin.Context, id int) error {
 	return nil
 }
 
-// GetByID 根据ID获取sys_call_record
 func (s *SysCallRecordService) GetByID(c *gin.Context, id int) (*models.SysCallRecord, error) {
-	// 查找sys_call_record记录
 	sysCallRecord := models.NewSysCallRecord()
-	if err := sysCallRecord.GetByID(c, id); err != nil {
+	if err := sysCallRecord.GetByIDWithCustomer(c, id, syscallRecordTenantScope(c)); err != nil {
 		return nil, err
 	}
 
 	return sysCallRecord, nil
 }
 
-// List sys_call_record列表（分页查询）
 func (s *SysCallRecordService) List(c *gin.Context, req models.SysCallRecordListRequest) (*models.SysCallRecordList, int64, error) {
-	// 获取总数
 	sysCallRecordList := models.NewSysCallRecordList()
-	scopes := []func(*gorm.DB) *gorm.DB{req.Handle()}
-	scopes = append(scopes, tenanthelper.TenantScope(c))
-	total, err := sysCallRecordList.GetTotal(c, scopes...)
+	scopes := []func(*gorm.DB) *gorm.DB{req.Handle(), syscallRecordTenantScope(c)}
+	total, err := sysCallRecordList.GetTotalWithCustomer(c, scopes...)
 	if err != nil {
 		return nil, 0, err
 	}
-    scopes = append(scopes, req.Paginate())
-	// 获取分页数据
-	err = sysCallRecordList.Find(c, scopes...)
-	if err != nil {
+
+	scopes = append(scopes, req.Paginate())
+	if err = sysCallRecordList.FindWithCustomer(c, scopes...); err != nil {
 		return nil, 0, err
 	}
 

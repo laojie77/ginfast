@@ -2,24 +2,26 @@ package models
 
 import (
 	"context"
-	"gin-fast/app/global/app"
 	"time"
+
+	"gin-fast/app/global/app"
 
 	"gorm.io/gorm"
 )
 
 // SysCustomerTraces sys_customer_traces 模型结构体
 type SysCustomerTraces struct {
-	Id         uint64         `gorm:"column:id;primaryKey;not null;autoIncrement" json:"id"`     // Id
-	CustomerID int64          `gorm:"column:customer_id;not null;index" json:"customerId"`       // 客户
-	UserID     int            `gorm:"column:user_id;not null;index" json:"userId"`               // 操作用户
-	TenantID   uint           `gorm:"column:tenant_id;not null;default:0;index" json:"tenantId"` // 所属租户
-	Data       string         `gorm:"column:data;not null" json:"data"`                          // 跟进内容
-	CreatedAt  *time.Time     `gorm:"column:created_at;index" json:"createdAt"`                  // CreatedAt
-	UpdatedAt  *time.Time     `gorm:"column:updated_at" json:"updatedAt"`                        // UpdatedAt
-	DeletedAt  gorm.DeletedAt `gorm:"column:deleted_at" json:"deletedAt"`                        // DeletedAt
-	UserName   string         `gorm:"column:user_name;->" json:"userName"`                       // 用户名称
-	Avatar     string         `gorm:"column:avatar;->" json:"avatar"`                            // 用户头像
+	Id          uint64         `gorm:"column:id;primaryKey;not null;autoIncrement" json:"id"`     // Id
+	CustomerID  int64          `gorm:"column:customer_id;not null;index" json:"customerId"`       // 客户
+	UserID      int            `gorm:"column:user_id;not null;index" json:"userId"`               // 操作用户
+	TenantID    uint           `gorm:"column:tenant_id;not null;default:0;index" json:"tenantId"` // 所属租户
+	Data        string         `gorm:"column:data;not null" json:"data"`                          // 跟进内容
+	CreatedAt   *time.Time     `gorm:"column:created_at;index" json:"createdAt"`                  // CreatedAt
+	UpdatedAt   *time.Time     `gorm:"column:updated_at" json:"updatedAt"`                        // UpdatedAt
+	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at" json:"deletedAt"`                        // DeletedAt
+	UserName    string         `gorm:"column:user_name;->" json:"userName"`                       // 用户名称
+	Avatar      string         `gorm:"column:avatar;->" json:"avatar"`                            // 用户头像
+	CustomerNum string         `gorm:"column:customer_num;->" json:"customerNum"`                 // 客户编号
 }
 
 // SysCustomerTracesWithUser 包含用户信息的跟进记录
@@ -47,8 +49,9 @@ func NewSysCustomerTracesWithUserList() *SysCustomerTracesWithUserList {
 func (l *SysCustomerTracesWithUserList) FindWithUser(c context.Context, funcs ...func(*gorm.DB) *gorm.DB) error {
 	return app.DB().WithContext(c).
 		Table("sys_customer_traces").
-		Select("sys_customer_traces.*, sys_users.nick_name as user_name, sys_users.avatar as avatar").
+		Select("sys_customer_traces.*, sys_users.nick_name as user_name, sys_users.avatar as avatar, sys_customer.num as customer_num").
 		Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
+		Joins("LEFT JOIN sys_customer ON sys_customer_traces.customer_id = sys_customer.id").
 		Scopes(funcs...).
 		Find(l).Error
 }
@@ -59,6 +62,7 @@ func (l *SysCustomerTracesWithUserList) GetTotalWithUser(c context.Context, quer
 	err := app.DB().WithContext(c).
 		Table("sys_customer_traces").
 		Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
+		Joins("LEFT JOIN sys_customer ON sys_customer_traces.customer_id = sys_customer.id").
 		Scopes(query...).
 		Count(&count).Error
 	return count, err
