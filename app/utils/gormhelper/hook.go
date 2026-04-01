@@ -9,111 +9,109 @@ import (
 	"gorm.io/gorm"
 )
 
-// 这里的函数都是gorm的hook函数，拦截一些官方我们认为不合格的操作行为，提升项目整体的完美性
+// 这里的函数都是 gorm 的 hook 函数，用于补充一些通用字段处理。
 
-// MaskNotDataError 解决gorm v2 包在查询无数据时，报错问题（record not found），但是官方认为报错是应该是，我们认为查询无数据，代码一切ok，不应该报错
+// MaskNotDataError 解决 gorm v2 查询无数据时抛错的问题。
 func MaskNotDataError(gormDB *gorm.DB) {
 	gormDB.Statement.RaiseErrorOnNotFound = false
 }
 
-// InterceptCreatePramsNotPtrError 拦截 create 函数参数如果是非指针类型的错误,新用户最容犯此错误
-
+// InterceptCreatePramsNotPtrError 拦截 create 参数不是指针的情况。
 func CreateBeforeHook(gormDB *gorm.DB) {
 	if reflect.TypeOf(gormDB.Statement.Dest).Kind() != reflect.Ptr {
 		app.ZapLog.Warn(myerrors.ErrorsGormDBCreateParamsNotPtr)
-	} else {
-		destValueOf := reflect.ValueOf(gormDB.Statement.Dest).Elem()
-		if destValueOf.Type().Kind() == reflect.Slice || destValueOf.Type().Kind() == reflect.Array {
-			inLen := destValueOf.Len()
-			for i := 0; i < inLen; i++ {
-				row := destValueOf.Index(i)
-				if row.Type().Kind() == reflect.Struct {
-					// 检查是否有TenantID字段，如果有则自动设置
-					if b, column := structHasSpecialField("TenantID", row); b {
-						// 从上下文中获取租户ID
-						if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
-							destValueOf.Index(i).FieldByName(column).Set(reflect.ValueOf(tenantID))
-						}
+		return
+	}
+
+	destValueOf := reflect.ValueOf(gormDB.Statement.Dest).Elem()
+	switch destValueOf.Type().Kind() {
+	case reflect.Slice, reflect.Array:
+		inLen := destValueOf.Len()
+		for i := 0; i < inLen; i++ {
+			row := destValueOf.Index(i)
+			switch row.Type().Kind() {
+			case reflect.Struct:
+				setStructUintField(row, "TenantID", GetTenantIDFromContext(gormDB.Statement.Context))
+				setStructUintField(row, "CreatedBy", GetCurrentUserIDFromContext(gormDB.Statement.Context))
+			case reflect.Map:
+				if b, column := structHasSpecialField("tenant_id", row); b {
+					if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
+						row.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(tenantID))
 					}
-					// 检查是否有CreatedBy字段，如果有则自动设置
-					if b, column := structHasSpecialField("CreatedBy", row); b {
-						// 从上下文中获取用户ID
-						if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
-							destValueOf.Index(i).FieldByName(column).Set(reflect.ValueOf(userID))
-						}
-					}
-				} else if row.Type().Kind() == reflect.Map {
-					// 检查是否有TenantID字段，如果有则自动设置
-					if b, column := structHasSpecialField("tenant_id", row); b {
-						// 从上下文中获取租户ID
-						if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
-							row.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(tenantID))
-						}
-					}
-					// 检查是否有CreatedBy字段，如果有则自动设置
-					if b, column := structHasSpecialField("created_by", row); b {
-						// 从上下文中获取用户ID
-						if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
-							row.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(userID))
-						}
+				}
+				if b, column := structHasSpecialField("created_by", row); b {
+					if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
+						row.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(userID))
 					}
 				}
 			}
-		} else if destValueOf.Type().Kind() == reflect.Struct {
-			// 检查是否有TenantID字段，如果有则自动设置
-			if b, column := structHasSpecialField("TenantID", gormDB.Statement.Dest); b {
-				// 从上下文中获取租户ID
-				if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
-					gormDB.Statement.SetColumn(column, tenantID)
-				}
+		}
+	case reflect.Struct:
+		setStatementUintColumn(gormDB, "TenantID", GetTenantIDFromContext(gormDB.Statement.Context))
+		setStatementUintColumn(gormDB, "CreatedBy", GetCurrentUserIDFromContext(gormDB.Statement.Context))
+	case reflect.Map:
+		if b, column := structHasSpecialField("tenant_id", gormDB.Statement.Dest); b {
+			if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
+				destValueOf.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(tenantID))
 			}
-			// 检查是否有CreatedBy字段，如果有则自动设置
-			if b, column := structHasSpecialField("CreatedBy", gormDB.Statement.Dest); b {
-				// 从上下文中获取用户ID
-				if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
-					gormDB.Statement.SetColumn(column, userID)
-				}
-			}
-		} else if destValueOf.Type().Kind() == reflect.Map {
-			// 检查是否有TenantID字段，如果有则自动设置
-			if b, column := structHasSpecialField("tenant_id", gormDB.Statement.Dest); b {
-				// 从上下文中获取租户ID
-				if tenantID := GetTenantIDFromContext(gormDB.Statement.Context); tenantID > 0 {
-					destValueOf.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(tenantID))
-				}
-			}
-			// 检查是否有CreatedBy字段，如果有则自动设置
-			if b, column := structHasSpecialField("created_by", gormDB.Statement.Dest); b {
-				// 从上下文中获取用户ID
-				if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
-					destValueOf.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(userID))
-				}
+		}
+		if b, column := structHasSpecialField("created_by", gormDB.Statement.Dest); b {
+			if userID := GetCurrentUserIDFromContext(gormDB.Statement.Context); userID > 0 {
+				destValueOf.SetMapIndex(reflect.ValueOf(column), reflect.ValueOf(userID))
 			}
 		}
 	}
 }
 
-// UpdateBeforeHook
-// InterceptUpdatePramsNotPtrError 拦截 save、update 函数参数如果是非指针类型的错误
-// 对于开发者来说，以结构体形式更新数，只需要在 update 、save 函数的参数前面添加 & 即可
-// 最终就可以完美兼支持、兼容 gorm 的所有回调函数
-// 但是如果是指定字段更新，例如： UpdateColumn 函数则只传递值即可，不需要做校验
-func UpdateBeforeHook(gormDB *gorm.DB) {
-	if reflect.TypeOf(gormDB.Statement.Dest).Kind() == reflect.Struct {
-		//_ = gormDB.AddError(errors.New(my_errors.ErrorsGormDBUpdateParamsNotPtr))
-		app.ZapLog.Warn(myerrors.ErrorsGormDBUpdateParamsNotPtr)
-	} else if reflect.TypeOf(gormDB.Statement.Dest).Kind() == reflect.Map {
-		// 如果是调用了 gorm.Update 、updates 函数 , 在参数没有传递指针的情况下，无法触发回调函数
+func setStructUintField(row reflect.Value, fieldName string, value uint) {
+	if value == 0 {
+		return
+	}
 
+	field := row.FieldByName(fieldName)
+	if !field.IsValid() || !field.CanSet() {
+		return
+	}
+
+	switch field.Kind() {
+	case reflect.Uint:
+		field.SetUint(uint64(value))
+	case reflect.Ptr:
+		if field.Type().Elem().Kind() != reflect.Uint {
+			return
+		}
+		ptr := reflect.New(field.Type().Elem())
+		ptr.Elem().SetUint(uint64(value))
+		field.Set(ptr)
 	}
 }
 
-// DeleteBeforeHook 删除前Hook
-func DeleteBeforeHook(gormDB *gorm.DB) {
-	// GORM 会自动处理 DeletedAt 字段（软删除）
+func setStatementUintColumn(gormDB *gorm.DB, fieldName string, value uint) {
+	if value == 0 {
+		return
+	}
+
+	if b, column := structHasSpecialField(fieldName, gormDB.Statement.Dest); b {
+		gormDB.Statement.SetColumn(column, value)
+	}
 }
 
-// structHasSpecialField  检查结构体是否有特定字段
+// UpdateBeforeHook
+// InterceptUpdatePramsNotPtrError 拦截 save、update 参数不是指针的情况。
+func UpdateBeforeHook(gormDB *gorm.DB) {
+	if reflect.TypeOf(gormDB.Statement.Dest).Kind() == reflect.Struct {
+		app.ZapLog.Warn(myerrors.ErrorsGormDBUpdateParamsNotPtr)
+	} else if reflect.TypeOf(gormDB.Statement.Dest).Kind() == reflect.Map {
+		// gorm.Update / Updates 在 map 场景下无需额外处理。
+	}
+}
+
+// DeleteBeforeHook 删除前 hook。
+func DeleteBeforeHook(gormDB *gorm.DB) {
+	_ = gormDB
+}
+
+// structHasSpecialField 检查结构体或 map 是否包含指定字段。
 func structHasSpecialField(fieldName string, anyStructPtr interface{}) (bool, string) {
 	var tmp reflect.Type
 	if reflect.TypeOf(anyStructPtr).Kind() == reflect.Ptr && reflect.ValueOf(anyStructPtr).Elem().Kind() == reflect.Map {
@@ -141,7 +139,6 @@ func structHasSpecialField(fieldName string, anyStructPtr interface{}) (bool, st
 			}
 		}
 	} else if reflect.Indirect(anyStructPtr.(reflect.Value)).Type().Kind() == reflect.Struct {
-		// 处理结构体
 		destValueOf := anyStructPtr.(reflect.Value)
 		tf := destValueOf.Type()
 		for i := 0; i < tf.NumField(); i++ {
@@ -169,22 +166,20 @@ func structHasSpecialField(fieldName string, anyStructPtr interface{}) (bool, st
 	return false, ""
 }
 
-// getColumnNameFromGormTag 从 gorm 标签中获取字段名
-// @defaultColumn 如果没有 gorm：column 标签为字段重命名，则使用默认字段名
-// @TagValue 字段中含有的gorm："column:created_at" 标签值，可能的格式：1. column:created_at    、2. default:null;  column:created_at  、3.  column:created_at; default:null
-func getColumnNameFromGormTag(defaultColumn, TagValue string) (str string) {
-	pos1 := strings.Index(TagValue, "column:")
+// getColumnNameFromGormTag 从 gorm tag 中获取列名。
+func getColumnNameFromGormTag(defaultColumn, tagValue string) (str string) {
+	pos1 := strings.Index(tagValue, "column:")
 	if pos1 == -1 {
 		str = defaultColumn
 		return
-	} else {
-		TagValue = TagValue[pos1+7:]
 	}
-	pos2 := strings.Index(TagValue, ";")
+
+	tagValue = tagValue[pos1+7:]
+	pos2 := strings.Index(tagValue, ";")
 	if pos2 == -1 {
-		str = TagValue
+		str = tagValue
 	} else {
-		str = TagValue[:pos2]
+		str = tagValue[:pos2]
 	}
 	return strings.ReplaceAll(str, " ", "")
 }

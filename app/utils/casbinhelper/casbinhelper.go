@@ -154,6 +154,12 @@ func (s *CasbinHelper) CasbinMiddleware() gin.HandlerFunc {
 		path := c.Request.URL.Path
 		method := c.Request.Method
 
+		// 当前用户自己的通知收件箱只要求登录，具体数据范围由业务层再限制到当前用户
+		if strings.HasPrefix(path, "/api/sysNotice/inbox") {
+			c.Next()
+			return
+		}
+
 		// 使用带前缀的用户ID进行权限检查
 		userSubject := s.PrefixUser(userID)
 		// 获取租户ID（如果存在）

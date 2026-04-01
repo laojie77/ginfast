@@ -16,11 +16,13 @@ import (
 	"gin-fast/app/utils/tokenhelper"
 	"gin-fast/app/utils/uploadhelper"
 	"gin-fast/app/utils/ymlconfig"
-	"gorm.io/gorm"
+	models2 "gin-fast/plugins/sysnotice/models"
 	"log"
 	"os"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
@@ -81,8 +83,7 @@ func initDB() {
 			log.Fatal(myerrors.ErrorsGormInitFail + err.Error())
 		} else {
 			app.GormDbMysql = dbMysql
-			// 执行AutoMigrate
-			//autoMigrateTables(dbMysql)
+			//autoMigrateNoticeTables(dbMysql)
 		}
 	}
 	//sqlserver
@@ -119,6 +120,26 @@ func autoMigrateTables(db *gorm.DB) {
 	}
 
 	app.ZapLog.Info("数据库表迁移成功")
+}
+
+func autoMigrateNoticeTables(db *gorm.DB) {
+	// 通知模块依赖的用户/租户等主表主要由 SQL 脚本维护，字段类型与 GORM 默认迁移类型不完全一致。
+	// 这里仅迁移表结构和索引，不自动创建外键，避免在老表上触发 MySQL 1215。
+	migrateDB := db.Session(&gorm.Session{})
+	migrateCfg := *migrateDB.Config
+	migrateCfg.DisableForeignKeyConstraintWhenMigrating = true
+	migrateDB.Config = &migrateCfg
+
+	tables := []interface{}{
+		&models2.SysNotice{},
+		&models2.SysNoticeTarget{},
+		&models2.SysNoticeRecipient{},
+	}
+
+	if err := migrateDB.AutoMigrate(tables...); err != nil {
+		app.ZapLog.Error("通知模块表迁移失败", zap.Error(err))
+		log.Fatal("通知模块表迁移失败: " + err.Error())
+	}
 }
 
 // 检查必要的文件夹是否存在
