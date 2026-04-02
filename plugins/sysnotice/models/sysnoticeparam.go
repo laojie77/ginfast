@@ -115,3 +115,19 @@ func (r *SysNoticeInboxListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 		return db
 	}
 }
+
+type SysNoticeRealtimeMockRequest struct {
+	models2.Validator
+	Scene       string `json:"scene" form:"scene" validate:"required" message:"实时通知场景不能为空"`
+	Title       string `json:"title" form:"title" validate:"required" message:"实时通知标题不能为空"`
+	Content     string `json:"content" form:"content" validate:"required" message:"实时通知内容不能为空"`
+	Level       string `json:"level" form:"level"`
+	ActionKind  string `json:"actionKind" form:"actionKind"`
+	ActionLabel string `json:"actionLabel" form:"actionLabel"`
+	ActionValue string `json:"actionValue" form:"actionValue"`
+	OpenMode    string `json:"openMode" form:"openMode"`
+}
+
+func (r *SysNoticeRealtimeMockRequest) Validate(c *gin.Context) error {
+	return r.Check(c, r)
+}

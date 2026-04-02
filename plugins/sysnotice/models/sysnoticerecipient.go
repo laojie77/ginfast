@@ -12,16 +12,16 @@ import (
 
 // SysNoticeRecipient 通知接收人快照
 type SysNoticeRecipient struct {
-	ID          uint       `gorm:"primarykey" json:"id"`
-	NoticeID    uint       `gorm:"column:notice_id;not null;comment:通知ID" json:"noticeId"`
-	UserID      uint       `gorm:"column:user_id;not null;comment:接收人ID" json:"userId"`
-	ReadStatus  int8       `gorm:"column:read_status;default:0;comment:读取状态" json:"readStatus"`
-	ReadTime    *time.Time `gorm:"column:read_time;comment:阅读时间" json:"readTime"`
-	TenantID    uint       `gorm:"column:tenant_id;default:0;comment:租户ID" json:"tenantId"`
-	PublishTime *time.Time `gorm:"column:publish_time;comment:发布时间快照" json:"publishTime"`
-	CreatedAt time.Time    `gorm:"column:created_at" json:"createdAt"`
-	Notice    SysNotice    `gorm:"foreignKey:notice_id;references:id" json:"notice"`
-	User      models2.User `gorm:"foreignKey:user_id;references:id" json:"user"`
+	ID          uint         `gorm:"primarykey" json:"id"`
+	NoticeID    uint         `gorm:"column:notice_id;not null;comment:通知ID" json:"noticeId"`
+	UserID      uint         `gorm:"column:user_id;not null;comment:接收人ID" json:"userId"`
+	ReadStatus  int8         `gorm:"column:read_status;default:0;comment:读取状态" json:"readStatus"`
+	ReadTime    *time.Time   `gorm:"column:read_time;comment:阅读时间" json:"readTime"`
+	TenantID    uint         `gorm:"column:tenant_id;default:0;comment:租户ID" json:"tenantId"`
+	PublishTime *time.Time   `gorm:"column:publish_time;comment:发布时间快照" json:"publishTime"`
+	CreatedAt   time.Time    `gorm:"column:created_at" json:"createdAt"`
+	Notice      SysNotice    `gorm:"foreignKey:NoticeID;references:ID" json:"notice"`
+	User        models2.User `gorm:"foreignKey:UserID;references:ID" json:"user"`
 }
 
 func (SysNoticeRecipient) TableName() string {

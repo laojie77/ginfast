@@ -32,7 +32,7 @@ type SysNoticeService struct {
 
 func NewSysNoticeService() *SysNoticeService {
 	return &SysNoticeService{
-		dispatcher: noopNoticeDispatcher{},
+		dispatcher: newDefaultNoticeDispatcher(),
 	}
 }
 
@@ -91,7 +91,7 @@ func (s *SysNoticeService) Update(c *gin.Context, req *models2.SysNoticeUpdateRe
 	if err != nil {
 		return nil, err
 	}
-	if notice.PublishStatus != models2.SysNoticePublishStatusDraft {
+	if notice.PublishStatus == models2.SysNoticePublishStatusPublished {
 		return nil, errors.New("仅未发布的通知允许编辑")
 	}
 
@@ -170,6 +170,10 @@ func (s *SysNoticeService) Revoke(c *gin.Context, noticeID uint) (*models2.SysNo
 		}).Error
 	if err != nil {
 		return nil, err
+	}
+
+	if pushErr := GetNoticeRealtimeHub().PushNoticeRevoked(c, tenantID, noticeID); pushErr != nil {
+		app.ZapLog.Warn("未知错误", zap.Error(pushErr), zap.Uint("notice_id", noticeID))
 	}
 
 	return s.GetByID(c, noticeID)
@@ -338,6 +342,15 @@ func (s *SysNoticeService) MarkRead(c *gin.Context, noticeID uint) error {
 			return errors.New("通知不存在")
 		}
 	}
+
+	if pushErr := GetNoticeRealtimeHub().PushNoticeRead(c, tenantID, userID, noticeID); pushErr != nil {
+		app.ZapLog.Warn("通知已读实时推送失败",
+			zap.Error(pushErr),
+			zap.Uint("notice_id", noticeID),
+			zap.Uint("user_id", userID),
+			zap.Uint("tenant_id", tenantID),
+		)
+	}
 	return nil
 }
 
@@ -359,6 +372,13 @@ func (s *SysNoticeService) MarkAllRead(c *gin.Context) (int64, error) {
 		})
 	if result.Error != nil {
 		return 0, result.Error
+	}
+	if pushErr := GetNoticeRealtimeHub().PushAllRead(c, tenantID, userID); pushErr != nil {
+		app.ZapLog.Warn("推送全部已读事件失败",
+			zap.Error(pushErr),
+			zap.Uint("user_id", userID),
+			zap.Uint("tenant_id", tenantID),
+		)
 	}
 	return result.RowsAffected, nil
 }
