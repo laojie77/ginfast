@@ -23,7 +23,7 @@ type SysCustomer struct {
 	UserID             int                             `gorm:"column:user_id;index:idx_user_id;comment:所属销售员ID" json:"userId"`                                                      // 所属销售员ID
 	CustomerStar       *int                            `gorm:"column:customer_star;comment:星级：0-5（0表示无星级）" json:"customerStar"`                                                     // 星级：0-5（0表示无星级）
 	Status             int                             `gorm:"column:status;not null;default:0;index:idx_status;comment:状态：0未受理，1待跟进，2预约上门，3待签约，4已签约，5已进件，6已放款，7已结算" json:"status"` // 状态
-	Intention          int                             `gorm:"column:intention;not null;default:0;comment:客户有效:未确认0待确认1有效客户2无效客户3黑名单4" json:"intention"`                            // 客户有效
+	Intention          int                             `gorm:"column:intention;not null;default:0;comment:客户有效:0未确认1待确认2有效客户3无效客户4黑名单" json:"intention"`                            // 客户有效
 	From               int                             `gorm:"column:from;not null;default:1;comment:客户来源:1系统分配，2再分配，3手动创建" json:"from"`                                            // 客户来源
 	LastTime           *time.Time                      `gorm:"column:last_time;comment:最后操作时间" json:"lastTime"`                                                                     // 最后操作时间
 	SinglePieceType    int                             `gorm:"column:single_piece_type;comment:贷款类型：1房抵贷，2车抵贷，3信用贷，4保单贷" json:"singlePieceType"`                                    // 贷款类型

@@ -127,6 +127,12 @@ type SysCustomerListRequest struct {
 	IsRead          *int       `form:"isRead"`
 }
 
+type SysCustomerExportSubmitResult struct {
+	Mode    string `json:"mode"`
+	Total   int64  `json:"total"`
+	Message string `json:"message,omitempty"`
+}
+
 // Validate 验证请求参数
 // Validate 校验客户列表查询参数。
 func (r *SysCustomerListRequest) Validate(c *gin.Context) error {

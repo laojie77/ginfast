@@ -25,10 +25,18 @@ type CaptchaConfig struct {
 	Length int  `json:"length" yaml:"length"`
 }
 
+// ExportConfig 导出配置参数
+type PlatformConfig struct {
+	ExportAsyncThreshold int `json:"exportAsyncThreshold" yaml:"ExportAsyncThreshold"`
+	ExportCleanDays      int `json:"exportCleanDays" yaml:"ExportCleanDays"`
+}
+
 // ConfigRequest 配置请求参数
 type ConfigRequest struct {
 	System        SystemConfig           `json:"system" yaml:"System"`
 	Safe          SafeConfig             `json:"safe" yaml:"Safe"`
 	Captcha       CaptchaConfig          `json:"captcha" yaml:"Captcha"`
+	Platform      PlatformConfig         `json:"platform" yaml:"Platform"`
+	Export        PlatformConfig         `json:"export,omitempty" yaml:"Export,omitempty"`
 	CustomerExtra map[string]interface{} `json:"customerExtra,omitempty" yaml:"CustomerExtra,omitempty"`
 }

@@ -18,6 +18,13 @@ type ConfigController struct {
 	Common
 }
 
+func getPlatformConfigValue(path string, legacyPath string) int {
+	if app.ConfigYml.Get(path) != nil {
+		return app.ConfigYml.GetInt(path)
+	}
+	return app.ConfigYml.GetInt(legacyPath)
+}
+
 // NewConfigController 创建配置控制器
 func NewConfigController() *ConfigController {
 	return &ConfigController{
@@ -66,6 +73,12 @@ func (con ConfigController) GetConfig(ctx *gin.Context) {
 	captchaConfig["length"] = app.ConfigYml.GetInt("captcha.length")
 	result["captcha"] = captchaConfig
 
+	// 获取导出配置
+	platformConfig := make(map[string]interface{})
+	platformConfig["exportAsyncThreshold"] = getPlatformConfigValue("platform.export_async_threshold", "export_async_threshold")
+	platformConfig["exportCleanDays"] = getPlatformConfigValue("platform.export_clean_days", "export_clean_days")
+	result["platform"] = platformConfig
+
 	// 获取客户资质配置
 	customerExtraConfig := app.ConfigYml.GetStringMap("customerExtra")
 	result["customerExtra"] = customerExtraConfig
@@ -112,6 +125,10 @@ func (con ConfigController) UpdateConfig(ctx *gin.Context) {
 	// 更新Captcha配置
 	app.ConfigYml.Set("captcha.open", req.Captcha.Open)
 	app.ConfigYml.Set("captcha.length", req.Captcha.Length)
+
+	// 更新导出配置
+	app.ConfigYml.Set("platform.export_async_threshold", req.Platform.ExportAsyncThreshold)
+	app.ConfigYml.Set("platform.export_clean_days", req.Platform.ExportCleanDays)
 
 	// 更新客户资质配置（如果存在）
 	if req.CustomerExtra != nil {
