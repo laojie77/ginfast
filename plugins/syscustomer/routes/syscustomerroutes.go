@@ -27,6 +27,7 @@ func init() {
 			sysCustomer.DELETE("/delete", sysCustomerControllers.Delete)
 			// sys_customer列表（分页查询）
 			sysCustomer.GET("/list", sysCustomerControllers.List)
+			sysCustomer.GET("/exportTask/:taskId", sysCustomerControllers.GetExportTask)
 			// 根据ID获取sys_customer信息
 			sysCustomer.GET("/:id", sysCustomerControllers.GetByID)
 		}

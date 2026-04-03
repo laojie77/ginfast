@@ -38,7 +38,41 @@ const (
 	customerExportModeSync         = "sync"
 	customerExportModeAsync        = "async"
 	customerExportFileSuffix       = ".csv"
+	defaultCustomerAsyncThreshold  = 1000
 )
+
+var customerExportOmitColumns = []string{
+	"MdMobile",
+	"LastTime",
+	"SinglePieceType",
+	"Sex",
+	"TenantID",
+	"CustomerComment",
+	"Source",
+	"NewData",
+	"RedistributionTime",
+	"BatchId",
+	"IsRead",
+	"IsPublic",
+	"IsRubbish",
+	"DispatchTime",
+	"IsRemind",
+	"IsSms",
+	"StarStatus",
+	"IsExchange",
+	"PublicTypeTime",
+	"PublicType",
+	"IsLock",
+	"UpdatedAt",
+	"DeletedAt",
+	"CustomerTracesList",
+}
+
+type customerExportWriteOptions struct {
+	Flusher       http.Flusher
+	SnapshotMaxID int
+	ProgressHook  func(processed int64)
+}
 
 type sysCustomerExportLookup struct {
 	dictMaps                map[string]map[string]string
@@ -49,23 +83,21 @@ type sysCustomerExportLookup struct {
 	customerExtraOptionMaps map[string]map[string]string
 }
 
-// sysDictExportItem 用来承接字典表查询结果，后面会统一转成 value -> name 映射。
 type sysDictExportItem struct {
 	Code  string
 	Value string
 	Name  string
 }
 
-// customerExtraExportInfo 是对客户 extra JSON 的导出态解析结果。
-// 这里把备注、有效二级标签、资质字段都拆开，后面组装 CSV 时直接拿来用。
 type customerExtraExportInfo struct {
 	ProgressRemark   string
 	IntentionValidID int
 	ExtraValues      map[string]string
 }
 
-// SubmitExport 先判断本次导出走同步还是异步，避免大批量导出阻塞请求。
 func (s *SysCustomerService) SubmitExport(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerExportSubmitResult, error) {
+	StartCustomerExportDispatcher()
+
 	total, err := s.CountExport(c, req)
 	if err != nil {
 		return nil, err
@@ -84,13 +116,45 @@ func (s *SysCustomerService) SubmitExport(c *gin.Context, req models.SysCustomer
 		return nil, fmt.Errorf("当前登录状态已失效")
 	}
 
+	existingTask, err := s.findActiveCustomerExportTask(c, claims.TenantID, claims.UserID)
+	if err != nil {
+		return nil, err
+	}
+
 	result.Mode = customerExportModeAsync
-	result.Message = fmt.Sprintf("本次导出共 %d 条数据，已转为异步导出，完成后会通过右上角实时通知提醒下载。", total)
+	if existingTask != nil {
+		result.TaskID = existingTask.ID
+		result.Status = existingTask.Status
+		s.notifyAsyncExportQueued(c, *claims, "客户导出任务仍在处理中", "当前已有导出任务正在排队或执行中，请稍后查看任务状态。", map[string]interface{}{
+			"taskId":   existingTask.ID,
+			"status":   existingTask.Status,
+			"existing": true,
+			"total":    total,
+		})
+		result.Existing = true
+		result.Message = "当前已有导出任务正在排队或执行中，请稍后查看任务状态。"
+		return result, nil
+	}
 
-	reqCopy := cloneSysCustomerListRequest(req)
-	claimsCopy := cloneExportClaims(claims)
-	go s.runAsyncExport(reqCopy, claimsCopy, total)
+	snapshotMaxID, err := s.getCustomerExportSnapshotMaxID(c, c, req)
+	if err != nil {
+		return nil, err
+	}
 
+	task, err := s.enqueueCustomerExportTask(c, req, *claims, total, snapshotMaxID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.notifyAsyncExportQueued(c, *claims, "客户导出任务已加入队列", fmt.Sprintf("本次导出共 %d 条数据，已加入异步导出队列，完成后会弹出下载提醒。", total), map[string]interface{}{
+		"taskId":   task.ID,
+		"status":   task.Status,
+		"existing": false,
+		"total":    total,
+	})
+	result.TaskID = task.ID
+	result.Status = task.Status
+	result.Message = fmt.Sprintf("本次导出共 %d 条数据，已加入异步导出队列，完成后会弹出下载提醒。", total)
 	return result, nil
 }
 
@@ -100,8 +164,9 @@ func (s *SysCustomerService) CountExport(c *gin.Context, req models.SysCustomerL
 	return total, err
 }
 
-// ExportCSV 执行同步导出，并在导出前按配置顺手清理当前租户的历史导出文件。
 func (s *SysCustomerService) ExportCSV(c *gin.Context, req models.SysCustomerListRequest) error {
+	StartCustomerExportDispatcher()
+
 	if claims := common.GetClaims(c); claims != nil {
 		s.tryCleanupExpiredAsyncExports(c, claims.TenantID, claims.UserID)
 	}
@@ -109,6 +174,11 @@ func (s *SysCustomerService) ExportCSV(c *gin.Context, req models.SysCustomerLis
 	total, err := s.CountExport(c, req)
 	if err != nil {
 		return err
+	}
+
+	threshold := getCustomerAsyncExportThreshold()
+	if threshold >= 0 && total > threshold {
+		return fmt.Errorf("当前导出数据量较大，请先提交异步导出任务")
 	}
 
 	filename, err := buildCustomerExportFilename(req, total)
@@ -120,26 +190,24 @@ func (s *SysCustomerService) ExportCSV(c *gin.Context, req models.SysCustomerLis
 	c.Header("Content-Transfer-Encoding", "binary")
 	c.Header("Cache-Control", "no-cache")
 
-	if err := writeCSVUTF8BOM(c.Writer); err != nil {
+	if err = writeCSVUTF8BOM(c.Writer); err != nil {
 		return err
 	}
 
-	var flusher http.Flusher
+	options := customerExportWriteOptions{}
 	if value, ok := c.Writer.(http.Flusher); ok {
-		flusher = value
+		options.Flusher = value
 	}
 
-	return s.exportCSVToWriter(c, c, c.Writer, req, flusher)
+	return s.exportCSVToWriter(c, c, c.Writer, req, options)
 }
 
-// exportCSVToWriter 统一输出 CSV 内容。
-// 同步导出写入响应流，异步导出写入本地文件，导出字段保持一致。
 func (s *SysCustomerService) exportCSVToWriter(
 	dbCtx context.Context,
 	authCtx *gin.Context,
 	output io.Writer,
 	req models.SysCustomerListRequest,
-	flusher http.Flusher,
+	options customerExportWriteOptions,
 ) error {
 	lookup, err := s.loadExportLookup(dbCtx, authCtx)
 	if err != nil {
@@ -157,13 +225,17 @@ func (s *SysCustomerService) exportCSVToWriter(
 	if err = writer.Error(); err != nil {
 		return err
 	}
-	if flusher != nil {
-		flusher.Flush()
+	if options.Flusher != nil {
+		options.Flusher.Flush()
 	}
 
-	baseQuery := buildCustomerExportQuery(dbCtx, authCtx, req)
-	lastID := 0
+	baseQuery := applyCustomerExportProjection(buildCustomerExportQuery(dbCtx, authCtx, req))
+	if options.SnapshotMaxID > 0 {
+		baseQuery = baseQuery.Where("id <= ?", options.SnapshotMaxID)
+	}
 
+	lastID := 0
+	processed := int64(0)
 	for {
 		var batch []models.SysCustomer
 		query := baseQuery.Session(&gorm.Session{})
@@ -180,22 +252,28 @@ func (s *SysCustomerService) exportCSVToWriter(
 				return err
 			}
 			lastID = item.Id
+			processed++
 		}
 
 		writer.Flush()
 		if err = writer.Error(); err != nil {
 			return err
 		}
-		if flusher != nil {
-			flusher.Flush()
+		if options.ProgressHook != nil {
+			options.ProgressHook(processed)
+		}
+		if options.Flusher != nil {
+			options.Flusher.Flush()
 		}
 	}
 
 	return nil
 }
 
-// buildCustomerExportQuery 复用列表页已有的筛选、数据权限和租户范围，
-// 保证“页面上能看到的数据”和“导出的数据”是一致的。
+func applyCustomerExportProjection(db *gorm.DB) *gorm.DB {
+	return db.Omit(customerExportOmitColumns...)
+}
+
 func buildCustomerExportQuery(dbCtx context.Context, authCtx *gin.Context, req models.SysCustomerListRequest) *gorm.DB {
 	currentUserID := int(common.GetCurrentUserID(authCtx))
 	return app.DB().WithContext(dbCtx).
@@ -210,65 +288,13 @@ func buildCustomerExportQuery(dbCtx context.Context, authCtx *gin.Context, req m
 		)
 }
 
-// runAsyncExport 执行异步导出任务。
-// 这里会先按配置清理当前租户的历史导出文件，再生成新的导出文件并推送实时通知。
-func (s *SysCustomerService) runAsyncExport(req models.SysCustomerListRequest, claims app.Claims, total int64) {
-	authCtx := buildExportAuthContext(claims)
-	dbCtx := context.Background()
-
-	if err := s.cleanupExpiredAsyncExports(dbCtx, claims.TenantID); err != nil {
-		app.ZapLog.Warn("清理过期客户导出文件失败",
-			zap.Error(err),
-			zap.Uint("user_id", claims.UserID),
-			zap.Uint("tenant_id", claims.TenantID),
-		)
-	}
-
-	affix, err := s.generateAsyncExportFile(dbCtx, authCtx, req, claims, total)
-	if err != nil {
-		app.ZapLog.Error("异步导出客户失败",
-			zap.Error(err),
-			zap.Uint("user_id", claims.UserID),
-			zap.Uint("tenant_id", claims.TenantID),
-		)
-		s.notifyAsyncExportFailed(dbCtx, claims, err)
-		return
-	}
-
-	if err := noticeService.NewNoticeBusinessService().NotifyExportReady(
-		dbCtx,
-		claims.TenantID,
-		claims.UserID,
-		"客户导出已完成",
-		fmt.Sprintf("已为您生成 %d 条客户数据导出文件，点击即可下载。", total),
-		strconv.FormatUint(uint64(affix.ID), 10),
-		map[string]interface{}{
-			"affixId":  affix.ID,
-			"fileName": affix.Name,
-			"total":    total,
-		},
-	); err != nil {
-		app.ZapLog.Warn("发送客户导出完成通知失败",
-			zap.Error(err),
-			zap.Uint("user_id", claims.UserID),
-			zap.Uint("tenant_id", claims.TenantID),
-			zap.Uint("affix_id", affix.ID),
-		)
-	}
-}
-
-func (s *SysCustomerService) notifyAsyncExportFailed(ctx context.Context, claims app.Claims, exportErr error) {
-	if err := noticeService.NewNoticeBusinessService().NotifyUsers(ctx, noticeService.NoticeBusinessNotifyRequest{
-		TenantID: claims.TenantID,
-		UserIDs:  []uint{claims.UserID},
-		Payload: noticeService.NoticeBusinessPayload{
-			Scene:   noticeService.NoticeBusinessSceneSystemInternal,
-			Title:   "客户导出失败",
-			Content: fmt.Sprintf("客户导出任务执行失败，请稍后重试。原因：%s", strings.TrimSpace(exportErr.Error())),
-			Level:   "error",
-		},
+func (s *SysCustomerService) notifyAsyncExportFailed(ctx context.Context, claims app.Claims, taskID uint, exportErr error) {
+	content := fmt.Sprintf("客户导出任务执行失败，请稍后重试。原因：%s", strings.TrimSpace(exportErr.Error()))
+	if err := noticeService.NewNoticeBusinessService().NotifyExportFailed(ctx, claims.TenantID, claims.UserID, "客户导出失败", content, map[string]interface{}{
+		"taskId": taskID,
+		"reason": strings.TrimSpace(exportErr.Error()),
 	}); err != nil {
-		app.ZapLog.Warn("发送客户导出失败通知失败",
+		app.ZapLog.Warn("send customer export failure notification failed",
 			zap.Error(err),
 			zap.Uint("user_id", claims.UserID),
 			zap.Uint("tenant_id", claims.TenantID),
@@ -276,14 +302,29 @@ func (s *SysCustomerService) notifyAsyncExportFailed(ctx context.Context, claims
 	}
 }
 
-// generateAsyncExportFile 负责把异步导出结果写入本地上传目录，
-// 并同步生成 sys_affix 记录，供通知弹窗直接下载。
+func (s *SysCustomerService) notifyAsyncExportQueued(
+	ctx context.Context,
+	claims app.Claims,
+	title, content string,
+	extra map[string]interface{},
+) {
+	if err := noticeService.NewNoticeBusinessService().NotifyExportQueued(ctx, claims.TenantID, claims.UserID, title, content, extra); err != nil {
+		app.ZapLog.Warn("send customer export queued notification failed",
+			zap.Error(err),
+			zap.Uint("user_id", claims.UserID),
+			zap.Uint("tenant_id", claims.TenantID),
+		)
+	}
+}
+
 func (s *SysCustomerService) generateAsyncExportFile(
 	dbCtx context.Context,
 	authCtx *gin.Context,
 	req models.SysCustomerListRequest,
 	claims app.Claims,
 	total int64,
+	snapshotMaxID int,
+	progressHook func(processed int64),
 ) (*appModels.SysAffix, error) {
 	uploadConfig := app.UploadService.GetUploadConfig()
 	localPath := strings.TrimSpace(uploadConfig.LocalPath)
@@ -319,7 +360,10 @@ func (s *SysCustomerService) generateAsyncExportFile(
 	if err = writeCSVUTF8BOM(file); err != nil {
 		return nil, err
 	}
-	if err = s.exportCSVToWriter(dbCtx, authCtx, file, req, nil); err != nil {
+	if err = s.exportCSVToWriter(dbCtx, authCtx, file, req, customerExportWriteOptions{
+		SnapshotMaxID: snapshotMaxID,
+		ProgressHook:  progressHook,
+	}); err != nil {
 		return nil, err
 	}
 	if err = file.Sync(); err != nil {
@@ -349,8 +393,6 @@ func (s *SysCustomerService) generateAsyncExportFile(
 	return affix, nil
 }
 
-// cleanupExpiredAsyncExports 仅清理客户导出生成的历史文件与附件记录。
-// 范围固定在 export/syscustomer，避免影响其他上传文件。
 func (s *SysCustomerService) cleanupExpiredAsyncExports(ctx context.Context, tenantID uint) error {
 	if tenantID == 0 {
 		return nil
@@ -374,7 +416,7 @@ func (s *SysCustomerService) cleanupExpiredAsyncExports(ctx context.Context, ten
 	for _, affix := range affixes {
 		if strings.TrimSpace(affix.Path) != "" {
 			if err := app.UploadService.DeleteFile(affix.Path); err != nil && !os.IsNotExist(err) {
-				app.ZapLog.Warn("删除过期客户导出文件失败",
+				app.ZapLog.Warn("delete expired customer export file failed",
 					zap.Error(err),
 					zap.Uint("affix_id", affix.ID),
 					zap.Uint("tenant_id", tenantID),
@@ -383,7 +425,7 @@ func (s *SysCustomerService) cleanupExpiredAsyncExports(ctx context.Context, ten
 		}
 
 		if err := app.DB().WithContext(ctx).Delete(&appModels.SysAffix{}, affix.ID).Error; err != nil {
-			app.ZapLog.Warn("删除过期客户导出附件记录失败",
+			app.ZapLog.Warn("delete expired customer export affix failed",
 				zap.Error(err),
 				zap.Uint("affix_id", affix.ID),
 				zap.Uint("tenant_id", tenantID),
@@ -394,11 +436,9 @@ func (s *SysCustomerService) cleanupExpiredAsyncExports(ctx context.Context, ten
 	return nil
 }
 
-// tryCleanupExpiredAsyncExports 是导出链路里的兜底清理。
-// 清理失败只记录日志，不影响当前导出继续执行。
 func (s *SysCustomerService) tryCleanupExpiredAsyncExports(ctx context.Context, tenantID uint, userID uint) {
 	if err := s.cleanupExpiredAsyncExports(ctx, tenantID); err != nil {
-		app.ZapLog.Warn("清理过期客户导出文件失败",
+		app.ZapLog.Warn("cleanup expired customer export files failed",
 			zap.Error(err),
 			zap.Uint("user_id", userID),
 			zap.Uint("tenant_id", tenantID),
@@ -406,11 +446,8 @@ func (s *SysCustomerService) tryCleanupExpiredAsyncExports(ctx context.Context, 
 	}
 }
 
-// getCustomerExportCleanupDuration 从配置读取导出文件保留天数。
-// export_clean = 0 表示当前导出前立马清理历史客户导出文件；
-// export_clean < 0 或未配置时默认按 3 天处理。
 func getCustomerExportCleanupDuration() time.Duration {
-	days := app.ConfigYml.GetInt("platform.export_clean")
+	days := app.ConfigYml.GetInt("platform.export_clean_days")
 	if days == 0 {
 		return 0
 	}
@@ -420,17 +457,19 @@ func getCustomerExportCleanupDuration() time.Duration {
 	return time.Duration(days) * 24 * time.Hour
 }
 
-// getCustomerAsyncExportThreshold 从配置读取异步导出阈值。
-// export_async_threshold 小于 0 时按 0 处理，方便测试时强制全部走异步。
 func getCustomerAsyncExportThreshold() int64 {
-	threshold := app.ConfigYml.GetInt("platform.export_async_threshold")
+	const configKey = "platform.export_async_threshold"
+	if app.ConfigYml.Get(configKey) == nil {
+		return defaultCustomerAsyncThreshold
+	}
+
+	threshold := app.ConfigYml.GetInt(configKey)
 	if threshold < 0 {
-		return 0
+		return defaultCustomerAsyncThreshold
 	}
 	return int64(threshold)
 }
 
-// cloneSysCustomerListRequest 通过 JSON 深拷贝请求参数，避免异步 goroutine 继续引用原始请求对象。
 func cloneSysCustomerListRequest(req models.SysCustomerListRequest) models.SysCustomerListRequest {
 	payload, err := json.Marshal(req)
 	if err != nil {
@@ -445,7 +484,6 @@ func cloneSysCustomerListRequest(req models.SysCustomerListRequest) models.SysCu
 	return cloned
 }
 
-// cloneExportClaims 复制一份登录态，供异步导出单独使用。
 func cloneExportClaims(claims *app.Claims) app.Claims {
 	if claims == nil {
 		return app.Claims{}
@@ -455,8 +493,6 @@ func cloneExportClaims(claims *app.Claims) app.Claims {
 	return cloned
 }
 
-// buildExportAuthContext 构造一个最小可用的 Gin 上下文，
-// 这样异步导出也能继续复用原来的权限和租户逻辑。
 func buildExportAuthContext(claims app.Claims) *gin.Context {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -465,7 +501,6 @@ func buildExportAuthContext(claims app.Claims) *gin.Context {
 	return ctx
 }
 
-// buildCustomerExportFilename 统一生成导出文件名，保持同步和异步导出命名规则一致。
 func buildCustomerExportFilename(req models.SysCustomerListRequest, total int64) (string, error) {
 	now := time.Now()
 	uniqueID, err := snowflakehelper.GenerateIDUint64()
@@ -478,7 +513,6 @@ func buildCustomerExportFilename(req models.SysCustomerListRequest, total int64)
 	return fmt.Sprintf("%s_%s_%s_%s_%d%s", sceneName, now.Format("20060102"), now.Format("150405"), shortCode, total, customerExportFileSuffix), nil
 }
 
-// resolveCustomerExportSceneName 把场景参数转成中文名称，用在导出文件名中更直观。
 func resolveCustomerExportSceneName(scene *string) string {
 	if scene == nil {
 		return "全部客户"
@@ -508,14 +542,19 @@ func resolveCustomerExportSceneName(scene *string) string {
 	}
 }
 
-// writeCSVUTF8BOM 预先写入 UTF-8 BOM，避免 Excel 打开 CSV 时中文乱码。
 func writeCSVUTF8BOM(writer io.Writer) error {
 	_, err := writer.Write([]byte{0xEF, 0xBB, 0xBF})
 	return err
 }
 
-// loadExportLookup 一次性准备好导出所需的各种名称映射，
-// 这样写每一行 CSV 时就不用重复查库了。
+func (s *SysCustomerService) getCustomerExportSnapshotMaxID(dbCtx context.Context, authCtx *gin.Context, req models.SysCustomerListRequest) (int, error) {
+	var maxID int
+	err := buildCustomerExportQuery(dbCtx, authCtx, req).
+		Select("COALESCE(MAX(id), 0)").
+		Scan(&maxID).Error
+	return maxID, err
+}
+
 func (s *SysCustomerService) loadExportLookup(dbCtx context.Context, authCtx *gin.Context) (*sysCustomerExportLookup, error) {
 	dictMaps, err := s.loadCustomerDictMaps(dbCtx)
 	if err != nil {
@@ -542,19 +581,16 @@ func (s *SysCustomerService) loadExportLookup(dbCtx context.Context, authCtx *gi
 		return nil, err
 	}
 
-	customerExtraOptionMaps := loadCustomerExtraOptionMaps()
-
 	return &sysCustomerExportLookup{
 		dictMaps:                dictMaps,
 		channelNames:            channelNames,
 		userNames:               userNames,
 		departmentNames:         departmentNames,
 		customerValidName:       customerValidNames,
-		customerExtraOptionMaps: customerExtraOptionMaps,
+		customerExtraOptionMaps: loadCustomerExtraOptionMaps(),
 	}, nil
 }
 
-// loadCustomerDictMaps 加载导出依赖的系统字典，并统一整理成 code -> value -> name 的结构。
 func (s *SysCustomerService) loadCustomerDictMaps(dbCtx context.Context) (map[string]map[string]string, error) {
 	dictCodes := []string{
 		"customerStar",
@@ -588,7 +624,6 @@ func (s *SysCustomerService) loadCustomerDictMaps(dbCtx context.Context) (map[st
 	return result, nil
 }
 
-// loadChannelNames 把渠道 ID 转成渠道名称，导出时直接展示中文名。
 func (s *SysCustomerService) loadChannelNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []channelCompanyModels.SysChannelCompany
 	err := app.DB().WithContext(dbCtx).
@@ -607,7 +642,6 @@ func (s *SysCustomerService) loadChannelNames(dbCtx context.Context, authCtx *gi
 	return result, nil
 }
 
-// loadUserNames 把跟进人 ID 转成用户昵称。
 func (s *SysCustomerService) loadUserNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.User
 	err := app.DB().WithContext(dbCtx).
@@ -626,7 +660,6 @@ func (s *SysCustomerService) loadUserNames(dbCtx context.Context, authCtx *gin.C
 	return result, nil
 }
 
-// loadDepartmentNames 把部门 ID 转成部门名称。
 func (s *SysCustomerService) loadDepartmentNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.SysDepartment
 	err := app.DB().WithContext(dbCtx).
@@ -645,7 +678,6 @@ func (s *SysCustomerService) loadDepartmentNames(dbCtx context.Context, authCtx 
 	return result, nil
 }
 
-// loadCustomerValidNames 把客户有效二级标签 ID 转成名称。
 func (s *SysCustomerService) loadCustomerValidNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.CustomerValid
 	err := app.DB().WithContext(dbCtx).
@@ -664,8 +696,6 @@ func (s *SysCustomerService) loadCustomerValidNames(dbCtx context.Context, authC
 	return result, nil
 }
 
-// buildCustomerExportRecord 把一条客户记录拼成一整行 CSV 数据。
-// 固定字段在前，资质字段按统一顺序追加，确保和表头完全对齐。
 func (s *SysCustomerService) buildCustomerExportRecord(item models.SysCustomer, lookup *sysCustomerExportLookup) []string {
 	extraInfo := parseCustomerExtraExportInfo(item.Extra)
 	statusName := dictLookupName(lookup.dictMaps, "progressStatusArr", item.Status, strconv.Itoa(item.Status))
@@ -716,8 +746,6 @@ func (s *SysCustomerService) buildCustomerExportRecord(item models.SysCustomer, 
 	return record
 }
 
-// parseCustomerExtraExportInfo 把 extra JSON 解析成导出更容易使用的结构。
-// 这里会顺手拆出业务阶段备注、客户有效二级标签以及所有资质字段。
 func parseCustomerExtraExportInfo(extra string) customerExtraExportInfo {
 	info := customerExtraExportInfo{
 		ExtraValues: map[string]string{},
@@ -765,8 +793,6 @@ func parseCustomerExtraExportInfo(extra string) customerExtraExportInfo {
 	return info
 }
 
-// buildCustomerExportHeaders 统一维护导出表头。
-// 固定列放前面，客户资质列按系统约定顺序依次展开。
 func buildCustomerExportHeaders() []string {
 	headers := []string{
 		"客户编号",
@@ -797,8 +823,6 @@ func buildCustomerExportHeaders() []string {
 	return headers
 }
 
-// loadCustomerExtraOptionMaps 读取系统配置中的客户资质选项，
-// 便于导出时把存储值翻译成中文标签。
 func loadCustomerExtraOptionMaps() map[string]map[string]string {
 	rawConfig := app.ConfigYml.GetStringMap("customerExtra")
 	result := make(map[string]map[string]string, len(rawConfig))
@@ -808,8 +832,6 @@ func loadCustomerExtraOptionMaps() map[string]map[string]string {
 	return result
 }
 
-// normalizeCustomerExtraOptionMap 兼容配置读取后出现的不同 map 类型，
-// 最终统一转换成 map[string]string，后面查值更稳定。
 func normalizeCustomerExtraOptionMap(raw interface{}) map[string]string {
 	switch value := raw.(type) {
 	case map[string]string:
@@ -847,7 +869,6 @@ func normalizeCustomerExtraOptionMap(raw interface{}) map[string]string {
 	}
 }
 
-// resolveCustomerExtraHeader 返回某个资质字段对应的中文列名。
 func resolveCustomerExtraHeader(property string) string {
 	if label := strings.TrimSpace(models.ExtraPropertyLabels[property]); label != "" {
 		return label
@@ -855,8 +876,6 @@ func resolveCustomerExtraHeader(property string) string {
 	return property
 }
 
-// resolveCustomerExtraExportValue 返回资质字段真正导出的显示值。
-// 优先取系统配置里的中文标签，没有配置时再回退原始值。
 func resolveCustomerExtraExportValue(property string, extraInfo customerExtraExportInfo, lookup *sysCustomerExportLookup) string {
 	value := strings.TrimSpace(extraInfo.ExtraValues[property])
 	if value == "" {
@@ -872,8 +891,6 @@ func resolveCustomerExtraExportValue(property string, extraInfo customerExtraExp
 	return value
 }
 
-// stringifyExtraExportValue 把 extra 里的数字、字符串、布尔值统一转成字符串，
-// 避免不同类型导致导出结果不一致。
 func stringifyExtraExportValue(value interface{}) (string, bool) {
 	switch typedValue := value.(type) {
 	case nil:
@@ -922,7 +939,6 @@ func stringifyExtraExportValue(value interface{}) (string, bool) {
 	}
 }
 
-// dictLookupName 从字典映射中拿中文名；如果没配到，就回退成原始值，避免导出空白。
 func dictLookupName(dictMaps map[string]map[string]string, dictCode string, value int, fallback string) string {
 	options, ok := dictMaps[dictCode]
 	if !ok {
@@ -934,7 +950,6 @@ func dictLookupName(dictMaps map[string]map[string]string, dictCode string, valu
 	return fallback
 }
 
-// formatTimePointer 把时间指针统一格式化为字符串，空值直接返回空串。
 func formatTimePointer(value *time.Time) string {
 	if value == nil || value.IsZero() {
 		return ""
@@ -942,7 +957,6 @@ func formatTimePointer(value *time.Time) string {
 	return value.Format("2006-01-02 15:04:05")
 }
 
-// formatIntValue 适合金额这类字段，0 也需要明确导出出来。
 func formatIntValue(value int) string {
 	if value == 0 {
 		return "0"
@@ -950,7 +964,6 @@ func formatIntValue(value int) string {
 	return strconv.Itoa(value)
 }
 
-// formatOptionalIntValue 适合年龄这类可留空字段，0 会按“未填写”处理。
 func formatOptionalIntValue(value int) string {
 	if value == 0 {
 		return ""
@@ -958,7 +971,6 @@ func formatOptionalIntValue(value int) string {
 	return strconv.Itoa(value)
 }
 
-// defaultString 给空字符串字段补一个兜底显示值。
 func defaultString(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -966,7 +978,6 @@ func defaultString(value string, fallback string) string {
 	return value
 }
 
-// sanitizeCSVCell 防止单元格以公式字符开头，被 Excel 当成公式执行。
 func sanitizeCSVCell(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {

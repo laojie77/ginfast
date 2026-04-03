@@ -77,6 +77,8 @@ func (con ConfigController) GetConfig(ctx *gin.Context) {
 	platformConfig := make(map[string]interface{})
 	platformConfig["exportAsyncThreshold"] = getPlatformConfigValue("platform.export_async_threshold", "export_async_threshold")
 	platformConfig["exportCleanDays"] = getPlatformConfigValue("platform.export_clean_days", "export_clean_days")
+	platformConfig["customerExportWorkerCount"] = getPlatformConfigValue("platform.customer_export_worker_count", "customer_export_worker_count")
+	platformConfig["watermark"] = getPlatformConfigValue("platform.watermark", "watermark")
 	result["platform"] = platformConfig
 
 	// 获取客户资质配置
@@ -129,6 +131,8 @@ func (con ConfigController) UpdateConfig(ctx *gin.Context) {
 	// 更新导出配置
 	app.ConfigYml.Set("platform.export_async_threshold", req.Platform.ExportAsyncThreshold)
 	app.ConfigYml.Set("platform.export_clean_days", req.Platform.ExportCleanDays)
+	app.ConfigYml.Set("platform.customer_export_worker_count", req.Platform.CustomerExportWorkerCount)
+	app.ConfigYml.Set("platform.watermark", req.Platform.Watermark)
 
 	// 更新客户资质配置（如果存在）
 	if req.CustomerExtra != nil {

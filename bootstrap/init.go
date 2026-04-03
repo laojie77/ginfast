@@ -16,6 +16,7 @@ import (
 	"gin-fast/app/utils/tokenhelper"
 	"gin-fast/app/utils/uploadhelper"
 	"gin-fast/app/utils/ymlconfig"
+	sysCustomerService "gin-fast/plugins/syscustomer/service"
 	models2 "gin-fast/plugins/sysnotice/models"
 	"log"
 	"os"
@@ -71,7 +72,8 @@ func init() {
 	// 从数据库加载启用的任务到调度器及任务结果处理器
 	scheduler.LoadJobsFromDB()
 
-	// 初始化Response
+	// 初始化Response 导出
+	sysCustomerService.StartCustomerExportDispatcher()
 	app.Response = response.NewResponseHandler()
 }
 

@@ -38,7 +38,7 @@ captcha:
   length: 4   # 验证码生成时的长度
 platform:
   # 客户导出异步阈值，导出总数大于该值时走异步；调试时可改成 0 强制全部走异步
-  export_async_threshold: 1
+  export_async_threshold: 1000
   # 客户导出文件清理天数，只在客户导出时顺手清理历史导出文件；0 表示立马清理历史导出文件
   export_clean_days: 3
 httpserver:

@@ -128,9 +128,26 @@ type SysCustomerListRequest struct {
 }
 
 type SysCustomerExportSubmitResult struct {
-	Mode    string `json:"mode"`
-	Total   int64  `json:"total"`
-	Message string `json:"message,omitempty"`
+	Mode     string `json:"mode"`
+	Total    int64  `json:"total"`
+	Message  string `json:"message,omitempty"`
+	TaskID   uint   `json:"taskId,omitempty"`
+	Status   string `json:"status,omitempty"`
+	Existing bool   `json:"existing,omitempty"`
+}
+
+type SysCustomerExportTaskResult struct {
+	ID           uint       `json:"id"`
+	Status       string     `json:"status"`
+	Total        int64      `json:"total"`
+	Processed    int64      `json:"processed"`
+	Progress     int        `json:"progress"`
+	AffixID      uint       `json:"affixId,omitempty"`
+	FileName     string     `json:"fileName,omitempty"`
+	ErrorMessage string     `json:"errorMessage,omitempty"`
+	StartedAt    *time.Time `json:"startedAt,omitempty"`
+	FinishedAt   *time.Time `json:"finishedAt,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 }
 
 // Validate 验证请求参数

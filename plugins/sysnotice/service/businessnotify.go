@@ -10,6 +10,8 @@ import (
 const (
 	NoticeBusinessSceneSystemInternal = "system_internal"
 	NoticeBusinessSceneExportDownload = "export_download"
+	NoticeBusinessSceneExportFailed   = "export_failed"
+	NoticeBusinessSceneExportQueue    = "export_queue"
 	NoticeBusinessSceneCustomerAssign = "customer_assigned"
 
 	NoticeBusinessActionKindRoute    = "route"
@@ -111,6 +113,44 @@ func (s *NoticeBusinessService) NotifyExportReady(
 				OpenMode: NoticeBusinessActionOpenModeBlank,
 			},
 			Extra: extra,
+		},
+	})
+}
+
+func (s *NoticeBusinessService) NotifyExportQueued(
+	ctx context.Context,
+	tenantID, userID uint,
+	title, content string,
+	extra map[string]interface{},
+) error {
+	return s.NotifyUsers(ctx, NoticeBusinessNotifyRequest{
+		TenantID: tenantID,
+		UserIDs:  []uint{userID},
+		Payload: NoticeBusinessPayload{
+			Scene:   NoticeBusinessSceneExportQueue,
+			Title:   title,
+			Content: content,
+			Level:   "info",
+			Extra:   extra,
+		},
+	})
+}
+
+func (s *NoticeBusinessService) NotifyExportFailed(
+	ctx context.Context,
+	tenantID, userID uint,
+	title, content string,
+	extra map[string]interface{},
+) error {
+	return s.NotifyUsers(ctx, NoticeBusinessNotifyRequest{
+		TenantID: tenantID,
+		UserIDs:  []uint{userID},
+		Payload: NoticeBusinessPayload{
+			Scene:   NoticeBusinessSceneExportFailed,
+			Title:   title,
+			Content: content,
+			Level:   "error",
+			Extra:   extra,
 		},
 	})
 }

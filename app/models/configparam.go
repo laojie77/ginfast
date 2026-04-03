@@ -27,8 +27,10 @@ type CaptchaConfig struct {
 
 // ExportConfig 导出配置参数
 type PlatformConfig struct {
-	ExportAsyncThreshold int `json:"exportAsyncThreshold" yaml:"ExportAsyncThreshold"`
-	ExportCleanDays      int `json:"exportCleanDays" yaml:"ExportCleanDays"`
+	ExportAsyncThreshold      int  `json:"exportAsyncThreshold" yaml:"ExportAsyncThreshold"`
+	ExportCleanDays           int  `json:"exportCleanDays" yaml:"ExportCleanDays"`
+	CustomerExportWorkerCount int  `json:"customerExportWorkerCount" yaml:"CustomerExportWorkerCount"`
+	Watermark                 bool `json:"watermark" yaml:"Watermark"`
 }
 
 // ConfigRequest 配置请求参数

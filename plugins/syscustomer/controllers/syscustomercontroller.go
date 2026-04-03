@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"strconv"
 	"strings"
 
 	"gin-fast/app/controllers"
@@ -90,6 +91,44 @@ func (c *SysCustomerController) GetByID(ctx *gin.Context) {
 	}
 
 	c.Success(ctx, sysCustomer)
+}
+
+func (c *SysCustomerController) GetExportTask(ctx *gin.Context) {
+	taskID, err := strconv.ParseUint(strings.TrimSpace(ctx.Param("taskId")), 10, 64)
+	if err != nil || taskID == 0 {
+		c.FailAndAbort(ctx, "导出任务ID无效", err)
+		return
+	}
+
+	claims := common.GetClaims(ctx)
+	if claims == nil {
+		c.FailAndAbort(ctx, "当前登录状态已失效", nil)
+		return
+	}
+
+	task, err := c.SysCustomerService.GetExportTask(ctx, claims.TenantID, claims.UserID, uint(taskID))
+	if err != nil {
+		c.FailAndAbort(ctx, "获取导出任务状态失败", err)
+		return
+	}
+	if task == nil {
+		c.FailAndAbort(ctx, "导出任务不存在", nil)
+		return
+	}
+
+	c.Success(ctx, models.SysCustomerExportTaskResult{
+		ID:           task.ID,
+		Status:       task.Status,
+		Total:        task.Total,
+		Processed:    task.Processed,
+		Progress:     task.Progress,
+		AffixID:      task.AffixID,
+		FileName:     task.FileName,
+		ErrorMessage: task.ErrorMessage,
+		StartedAt:    task.StartedAt,
+		FinishedAt:   task.FinishedAt,
+		UpdatedAt:    task.UpdatedAt,
+	})
 }
 
 // List returns the sys_customer list or streams the export file when requested.
