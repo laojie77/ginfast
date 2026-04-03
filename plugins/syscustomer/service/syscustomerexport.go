@@ -41,22 +41,27 @@ const (
 )
 
 type sysCustomerExportLookup struct {
-	dictMaps          map[string]map[string]string
-	channelNames      map[int]string
-	userNames         map[int]string
-	departmentNames   map[int]string
-	customerValidName map[int]string
+	dictMaps                map[string]map[string]string
+	channelNames            map[int]string
+	userNames               map[int]string
+	departmentNames         map[int]string
+	customerValidName       map[int]string
+	customerExtraOptionMaps map[string]map[string]string
 }
 
+// sysDictExportItem 用来承接字典表查询结果，后面会统一转成 value -> name 映射。
 type sysDictExportItem struct {
 	Code  string
 	Value string
 	Name  string
 }
 
+// customerExtraExportInfo 是对客户 extra JSON 的导出态解析结果。
+// 这里把备注、有效二级标签、资质字段都拆开，后面组装 CSV 时直接拿来用。
 type customerExtraExportInfo struct {
 	ProgressRemark   string
 	IntentionValidID int
+	ExtraValues      map[string]string
 }
 
 // SubmitExport 先判断本次导出走同步还是异步，避免大批量导出阻塞请求。
@@ -144,30 +149,7 @@ func (s *SysCustomerService) exportCSVToWriter(
 	writer := csv.NewWriter(output)
 	defer writer.Flush()
 
-	headers := []string{
-		"客户编号",
-		"客户姓名",
-		"手机号",
-		"业务阶段",
-		"客户有效",
-		"星级",
-		"渠道来源",
-		"跟进人",
-		"需求金额",
-		"客户备注",
-		"分配时间",
-		"所属部门",
-		"所在城市",
-		"客户来源",
-		"再分配",
-		"离职数据",
-		"重复标记",
-		"短信状态",
-		"星级回传",
-		"锁定状态",
-		"创建时间",
-		"更新时间",
-	}
+	headers := buildCustomerExportHeaders()
 	if err = writer.Write(headers); err != nil {
 		return err
 	}
@@ -212,6 +194,8 @@ func (s *SysCustomerService) exportCSVToWriter(
 	return nil
 }
 
+// buildCustomerExportQuery 复用列表页已有的筛选、数据权限和租户范围，
+// 保证“页面上能看到的数据”和“导出的数据”是一致的。
 func buildCustomerExportQuery(dbCtx context.Context, authCtx *gin.Context, req models.SysCustomerListRequest) *gorm.DB {
 	currentUserID := int(common.GetCurrentUserID(authCtx))
 	return app.DB().WithContext(dbCtx).
@@ -446,6 +430,7 @@ func getCustomerAsyncExportThreshold() int64 {
 	return int64(threshold)
 }
 
+// cloneSysCustomerListRequest 通过 JSON 深拷贝请求参数，避免异步 goroutine 继续引用原始请求对象。
 func cloneSysCustomerListRequest(req models.SysCustomerListRequest) models.SysCustomerListRequest {
 	payload, err := json.Marshal(req)
 	if err != nil {
@@ -460,6 +445,7 @@ func cloneSysCustomerListRequest(req models.SysCustomerListRequest) models.SysCu
 	return cloned
 }
 
+// cloneExportClaims 复制一份登录态，供异步导出单独使用。
 func cloneExportClaims(claims *app.Claims) app.Claims {
 	if claims == nil {
 		return app.Claims{}
@@ -469,6 +455,8 @@ func cloneExportClaims(claims *app.Claims) app.Claims {
 	return cloned
 }
 
+// buildExportAuthContext 构造一个最小可用的 Gin 上下文，
+// 这样异步导出也能继续复用原来的权限和租户逻辑。
 func buildExportAuthContext(claims app.Claims) *gin.Context {
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -477,6 +465,7 @@ func buildExportAuthContext(claims app.Claims) *gin.Context {
 	return ctx
 }
 
+// buildCustomerExportFilename 统一生成导出文件名，保持同步和异步导出命名规则一致。
 func buildCustomerExportFilename(req models.SysCustomerListRequest, total int64) (string, error) {
 	now := time.Now()
 	uniqueID, err := snowflakehelper.GenerateIDUint64()
@@ -489,6 +478,7 @@ func buildCustomerExportFilename(req models.SysCustomerListRequest, total int64)
 	return fmt.Sprintf("%s_%s_%s_%s_%d%s", sceneName, now.Format("20060102"), now.Format("150405"), shortCode, total, customerExportFileSuffix), nil
 }
 
+// resolveCustomerExportSceneName 把场景参数转成中文名称，用在导出文件名中更直观。
 func resolveCustomerExportSceneName(scene *string) string {
 	if scene == nil {
 		return "全部客户"
@@ -518,11 +508,14 @@ func resolveCustomerExportSceneName(scene *string) string {
 	}
 }
 
+// writeCSVUTF8BOM 预先写入 UTF-8 BOM，避免 Excel 打开 CSV 时中文乱码。
 func writeCSVUTF8BOM(writer io.Writer) error {
 	_, err := writer.Write([]byte{0xEF, 0xBB, 0xBF})
 	return err
 }
 
+// loadExportLookup 一次性准备好导出所需的各种名称映射，
+// 这样写每一行 CSV 时就不用重复查库了。
 func (s *SysCustomerService) loadExportLookup(dbCtx context.Context, authCtx *gin.Context) (*sysCustomerExportLookup, error) {
 	dictMaps, err := s.loadCustomerDictMaps(dbCtx)
 	if err != nil {
@@ -549,15 +542,19 @@ func (s *SysCustomerService) loadExportLookup(dbCtx context.Context, authCtx *gi
 		return nil, err
 	}
 
+	customerExtraOptionMaps := loadCustomerExtraOptionMaps()
+
 	return &sysCustomerExportLookup{
-		dictMaps:          dictMaps,
-		channelNames:      channelNames,
-		userNames:         userNames,
-		departmentNames:   departmentNames,
-		customerValidName: customerValidNames,
+		dictMaps:                dictMaps,
+		channelNames:            channelNames,
+		userNames:               userNames,
+		departmentNames:         departmentNames,
+		customerValidName:       customerValidNames,
+		customerExtraOptionMaps: customerExtraOptionMaps,
 	}, nil
 }
 
+// loadCustomerDictMaps 加载导出依赖的系统字典，并统一整理成 code -> value -> name 的结构。
 func (s *SysCustomerService) loadCustomerDictMaps(dbCtx context.Context) (map[string]map[string]string, error) {
 	dictCodes := []string{
 		"customerStar",
@@ -591,6 +588,7 @@ func (s *SysCustomerService) loadCustomerDictMaps(dbCtx context.Context) (map[st
 	return result, nil
 }
 
+// loadChannelNames 把渠道 ID 转成渠道名称，导出时直接展示中文名。
 func (s *SysCustomerService) loadChannelNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []channelCompanyModels.SysChannelCompany
 	err := app.DB().WithContext(dbCtx).
@@ -609,6 +607,7 @@ func (s *SysCustomerService) loadChannelNames(dbCtx context.Context, authCtx *gi
 	return result, nil
 }
 
+// loadUserNames 把跟进人 ID 转成用户昵称。
 func (s *SysCustomerService) loadUserNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.User
 	err := app.DB().WithContext(dbCtx).
@@ -627,6 +626,7 @@ func (s *SysCustomerService) loadUserNames(dbCtx context.Context, authCtx *gin.C
 	return result, nil
 }
 
+// loadDepartmentNames 把部门 ID 转成部门名称。
 func (s *SysCustomerService) loadDepartmentNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.SysDepartment
 	err := app.DB().WithContext(dbCtx).
@@ -645,6 +645,7 @@ func (s *SysCustomerService) loadDepartmentNames(dbCtx context.Context, authCtx 
 	return result, nil
 }
 
+// loadCustomerValidNames 把客户有效二级标签 ID 转成名称。
 func (s *SysCustomerService) loadCustomerValidNames(dbCtx context.Context, authCtx *gin.Context) (map[int]string, error) {
 	var rows []appModels.CustomerValid
 	err := app.DB().WithContext(dbCtx).
@@ -663,6 +664,8 @@ func (s *SysCustomerService) loadCustomerValidNames(dbCtx context.Context, authC
 	return result, nil
 }
 
+// buildCustomerExportRecord 把一条客户记录拼成一整行 CSV 数据。
+// 固定字段在前，资质字段按统一顺序追加，确保和表头完全对齐。
 func (s *SysCustomerService) buildCustomerExportRecord(item models.SysCustomer, lookup *sysCustomerExportLookup) []string {
 	extraInfo := parseCustomerExtraExportInfo(item.Extra)
 	statusName := dictLookupName(lookup.dictMaps, "progressStatusArr", item.Status, strconv.Itoa(item.Status))
@@ -688,6 +691,7 @@ func (s *SysCustomerService) buildCustomerExportRecord(item models.SysCustomer, 
 		sanitizeCSVCell(item.Num),
 		sanitizeCSVCell(defaultString(item.Name, "未命名客户")),
 		sanitizeCSVCell(item.Mobile),
+		sanitizeCSVCell(formatOptionalIntValue(item.Age)),
 		sanitizeCSVCell(statusDisplay),
 		sanitizeCSVCell(intentionDisplay),
 		sanitizeCSVCell(customerStarName),
@@ -702,18 +706,22 @@ func (s *SysCustomerService) buildCustomerExportRecord(item models.SysCustomer, 
 		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "isStatus", item.IsReassign, strconv.Itoa(item.IsReassign))),
 		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "isStatus", item.IsQuit, strconv.Itoa(item.IsQuit))),
 		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "isStatus", item.IsRepeat, strconv.Itoa(item.IsRepeat))),
-		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "isSms", item.IsSms, strconv.Itoa(item.IsSms))),
-		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "starStatus", item.StarStatus, strconv.Itoa(item.StarStatus))),
-		sanitizeCSVCell(dictLookupName(lookup.dictMaps, "isStatus", item.IsLock, strconv.Itoa(item.IsLock))),
 		sanitizeCSVCell(formatTimePointer(item.CreatedAt)),
-		sanitizeCSVCell(formatTimePointer(item.UpdatedAt)),
+	}
+
+	for _, property := range models.AllExtraProperties {
+		record = append(record, sanitizeCSVCell(resolveCustomerExtraExportValue(property, extraInfo, lookup)))
 	}
 
 	return record
 }
 
+// parseCustomerExtraExportInfo 把 extra JSON 解析成导出更容易使用的结构。
+// 这里会顺手拆出业务阶段备注、客户有效二级标签以及所有资质字段。
 func parseCustomerExtraExportInfo(extra string) customerExtraExportInfo {
-	info := customerExtraExportInfo{}
+	info := customerExtraExportInfo{
+		ExtraValues: map[string]string{},
+	}
 	if strings.TrimSpace(extra) == "" {
 		return info
 	}
@@ -746,9 +754,175 @@ func parseCustomerExtraExportInfo(extra string) customerExtraExportInfo {
 		}
 	}
 
+	for _, property := range models.AllExtraProperties {
+		if rawValue, exists := extraMap[property]; exists {
+			if parsedValue, ok := stringifyExtraExportValue(rawValue); ok {
+				info.ExtraValues[property] = parsedValue
+			}
+		}
+	}
+
 	return info
 }
 
+// buildCustomerExportHeaders 统一维护导出表头。
+// 固定列放前面，客户资质列按系统约定顺序依次展开。
+func buildCustomerExportHeaders() []string {
+	headers := []string{
+		"客户编号",
+		"客户姓名",
+		"手机号",
+		"年龄",
+		"业务阶段",
+		"客户有效",
+		"星级",
+		"渠道来源",
+		"跟进人",
+		"需求金额",
+		"客户备注",
+		"分配时间",
+		"所属部门",
+		"所在城市",
+		"客户来源",
+		"再分配",
+		"离职数据",
+		"重复标记",
+		"创建时间",
+	}
+
+	for _, property := range models.AllExtraProperties {
+		headers = append(headers, resolveCustomerExtraHeader(property))
+	}
+
+	return headers
+}
+
+// loadCustomerExtraOptionMaps 读取系统配置中的客户资质选项，
+// 便于导出时把存储值翻译成中文标签。
+func loadCustomerExtraOptionMaps() map[string]map[string]string {
+	rawConfig := app.ConfigYml.GetStringMap("customerExtra")
+	result := make(map[string]map[string]string, len(rawConfig))
+	for property, options := range rawConfig {
+		result[property] = normalizeCustomerExtraOptionMap(options)
+	}
+	return result
+}
+
+// normalizeCustomerExtraOptionMap 兼容配置读取后出现的不同 map 类型，
+// 最终统一转换成 map[string]string，后面查值更稳定。
+func normalizeCustomerExtraOptionMap(raw interface{}) map[string]string {
+	switch value := raw.(type) {
+	case map[string]string:
+		result := make(map[string]string, len(value))
+		for key, label := range value {
+			key = strings.TrimSpace(key)
+			label = strings.TrimSpace(label)
+			if key != "" && label != "" {
+				result[key] = label
+			}
+		}
+		return result
+	case map[string]interface{}:
+		result := make(map[string]string, len(value))
+		for key, label := range value {
+			key = strings.TrimSpace(key)
+			labelText := strings.TrimSpace(fmt.Sprint(label))
+			if key != "" && labelText != "" {
+				result[key] = labelText
+			}
+		}
+		return result
+	case map[interface{}]interface{}:
+		result := make(map[string]string, len(value))
+		for key, label := range value {
+			keyText := strings.TrimSpace(fmt.Sprint(key))
+			labelText := strings.TrimSpace(fmt.Sprint(label))
+			if keyText != "" && labelText != "" {
+				result[keyText] = labelText
+			}
+		}
+		return result
+	default:
+		return map[string]string{}
+	}
+}
+
+// resolveCustomerExtraHeader 返回某个资质字段对应的中文列名。
+func resolveCustomerExtraHeader(property string) string {
+	if label := strings.TrimSpace(models.ExtraPropertyLabels[property]); label != "" {
+		return label
+	}
+	return property
+}
+
+// resolveCustomerExtraExportValue 返回资质字段真正导出的显示值。
+// 优先取系统配置里的中文标签，没有配置时再回退原始值。
+func resolveCustomerExtraExportValue(property string, extraInfo customerExtraExportInfo, lookup *sysCustomerExportLookup) string {
+	value := strings.TrimSpace(extraInfo.ExtraValues[property])
+	if value == "" {
+		return ""
+	}
+
+	if lookup != nil {
+		if label := strings.TrimSpace(lookup.customerExtraOptionMaps[property][value]); label != "" {
+			return label
+		}
+	}
+
+	return value
+}
+
+// stringifyExtraExportValue 把 extra 里的数字、字符串、布尔值统一转成字符串，
+// 避免不同类型导致导出结果不一致。
+func stringifyExtraExportValue(value interface{}) (string, bool) {
+	switch typedValue := value.(type) {
+	case nil:
+		return "", false
+	case string:
+		trimmed := strings.TrimSpace(typedValue)
+		return trimmed, trimmed != ""
+	case json.Number:
+		trimmed := strings.TrimSpace(typedValue.String())
+		return trimmed, trimmed != ""
+	case float64:
+		if typedValue == float64(int64(typedValue)) {
+			return strconv.FormatInt(int64(typedValue), 10), true
+		}
+		return strconv.FormatFloat(typedValue, 'f', -1, 64), true
+	case float32:
+		if typedValue == float32(int64(typedValue)) {
+			return strconv.FormatInt(int64(typedValue), 10), true
+		}
+		return strconv.FormatFloat(float64(typedValue), 'f', -1, 32), true
+	case int:
+		return strconv.Itoa(typedValue), true
+	case int8:
+		return strconv.FormatInt(int64(typedValue), 10), true
+	case int16:
+		return strconv.FormatInt(int64(typedValue), 10), true
+	case int32:
+		return strconv.FormatInt(int64(typedValue), 10), true
+	case int64:
+		return strconv.FormatInt(typedValue, 10), true
+	case uint:
+		return strconv.FormatUint(uint64(typedValue), 10), true
+	case uint8:
+		return strconv.FormatUint(uint64(typedValue), 10), true
+	case uint16:
+		return strconv.FormatUint(uint64(typedValue), 10), true
+	case uint32:
+		return strconv.FormatUint(uint64(typedValue), 10), true
+	case uint64:
+		return strconv.FormatUint(typedValue, 10), true
+	case bool:
+		return strconv.FormatBool(typedValue), true
+	default:
+		trimmed := strings.TrimSpace(fmt.Sprint(typedValue))
+		return trimmed, trimmed != ""
+	}
+}
+
+// dictLookupName 从字典映射中拿中文名；如果没配到，就回退成原始值，避免导出空白。
 func dictLookupName(dictMaps map[string]map[string]string, dictCode string, value int, fallback string) string {
 	options, ok := dictMaps[dictCode]
 	if !ok {
@@ -760,6 +934,7 @@ func dictLookupName(dictMaps map[string]map[string]string, dictCode string, valu
 	return fallback
 }
 
+// formatTimePointer 把时间指针统一格式化为字符串，空值直接返回空串。
 func formatTimePointer(value *time.Time) string {
 	if value == nil || value.IsZero() {
 		return ""
@@ -767,6 +942,7 @@ func formatTimePointer(value *time.Time) string {
 	return value.Format("2006-01-02 15:04:05")
 }
 
+// formatIntValue 适合金额这类字段，0 也需要明确导出出来。
 func formatIntValue(value int) string {
 	if value == 0 {
 		return "0"
@@ -774,6 +950,15 @@ func formatIntValue(value int) string {
 	return strconv.Itoa(value)
 }
 
+// formatOptionalIntValue 适合年龄这类可留空字段，0 会按“未填写”处理。
+func formatOptionalIntValue(value int) string {
+	if value == 0 {
+		return ""
+	}
+	return strconv.Itoa(value)
+}
+
+// defaultString 给空字符串字段补一个兜底显示值。
 func defaultString(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -781,6 +966,7 @@ func defaultString(value string, fallback string) string {
 	return value
 }
 
+// sanitizeCSVCell 防止单元格以公式字符开头，被 Excel 当成公式执行。
 func sanitizeCSVCell(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
