@@ -21,6 +21,7 @@ type SysTenantAddRequest struct {
 	SmsStatus      int8   `form:"smsStatus" json:"smsStatus"`
 	IsPublic       int8   `form:"isPublic" json:"isPublic"`
 	IsRepeatNeed   int8   `form:"isRepeatNeed" json:"isRepeatNeed"`
+	IsWatermark    int8   `form:"isWatermark" json:"isWatermark"`
 }
 
 func (r *SysTenantAddRequest) Validate(c *gin.Context) error {
@@ -44,6 +45,7 @@ type SysTenantUpdateRequest struct {
 	SmsStatus      int8   `form:"smsStatus" json:"smsStatus"`
 	IsPublic       int8   `form:"isPublic" json:"isPublic"`
 	IsRepeatNeed   int8   `form:"isRepeatNeed" json:"isRepeatNeed"`
+	IsWatermark    int8   `form:"isWatermark" json:"isWatermark"`
 }
 
 func (r *SysTenantUpdateRequest) Validate(c *gin.Context) error {

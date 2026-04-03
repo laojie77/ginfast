@@ -23,6 +23,7 @@ type Tenant struct {
 	SmsStatus      int8   `gorm:"column:sms_status;default:0;comment:短信状态 0停用 1启用" json:"smsStatus"`
 	IsPublic       int8   `gorm:"column:is_public;default:1;comment:公共池回收 0否 1是" json:"isPublic"`
 	IsRepeatNeed   int8   `gorm:"column:is_repeat_need;default:1;comment:是否重复进入 0否 1是" json:"isRepeatNeed"`
+	IsWatermark    int8   `gorm:"column:is_watermark;default:0;comment:开启水印 0否 1是" json:"isWatermark"`
 }
 
 // TableName 设置表名

@@ -166,6 +166,7 @@ func (tc *TenantController) Add(c *gin.Context) {
 	tenant.SmsStatus = req.SmsStatus
 	tenant.IsPublic = req.IsPublic
 	tenant.IsRepeatNeed = req.IsRepeatNeed
+	tenant.IsWatermark = req.IsWatermark
 
 	err = app.DB().WithContext(c).Create(tenant).Error
 	if err != nil {
@@ -257,6 +258,7 @@ func (tc *TenantController) Update(c *gin.Context) {
 	tenant.SmsStatus = req.SmsStatus
 	tenant.IsPublic = req.IsPublic
 	tenant.IsRepeatNeed = req.IsRepeatNeed
+	tenant.IsWatermark = req.IsWatermark
 
 	err = app.DB().WithContext(c).Save(tenant).Error
 	if err != nil {
