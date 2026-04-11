@@ -78,7 +78,7 @@ func (con ConfigController) GetConfig(ctx *gin.Context) {
 	platformConfig["exportAsyncThreshold"] = getPlatformConfigValue("platform.export_async_threshold", "export_async_threshold")
 	platformConfig["exportCleanDays"] = getPlatformConfigValue("platform.export_clean_days", "export_clean_days")
 	platformConfig["customerExportWorkerCount"] = getPlatformConfigValue("platform.customer_export_worker_count", "customer_export_worker_count")
-	platformConfig["watermark"] = getPlatformConfigValue("platform.watermark", "watermark")
+	platformConfig["watermark"] = app.ConfigYml.GetBool("platform.watermark")
 	result["platform"] = platformConfig
 
 	// 获取客户资质配置

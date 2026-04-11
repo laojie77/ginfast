@@ -68,10 +68,12 @@ func (uc *UserController) GetProfile(c *gin.Context) {
 	tenant := models.NewTenant()
 	tenantName := ""
 	tenantDomain := ""
+	var isWatermark interface{}
 	if claims.TenantID > 0 {
 		if err := tenant.FindByID(c, claims.TenantID); err == nil && !tenant.IsEmpty() {
 			tenantName = tenant.Name
 			tenantDomain = tenant.Domain
+			isWatermark = tenant.IsWatermark
 		}
 	}
 
@@ -117,6 +119,7 @@ func (uc *UserController) GetProfile(c *gin.Context) {
 		"roles":         user.Roles,
 		"department":    user.Department,
 		"tenantID":      claims.TenantID, // 用户当前登录的租户的ID
+		"isWatermark":   isWatermark,     // 公司水印开启
 		"tenantCode":    claims.TenantCode,
 		"tenantName":    tenantName,
 		"tenantDomain":  tenantDomain,  // 完整的域名
