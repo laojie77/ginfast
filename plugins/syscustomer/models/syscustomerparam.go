@@ -1,7 +1,9 @@
 package models
 
 import (
+	"crypto/md5"
 	"errors"
+	"fmt"
 	"gin-fast/app/models"
 	"regexp"
 	"strings"
@@ -20,6 +22,14 @@ func normalizeCustomerMobile(mobile string) string {
 
 func isValidCustomerMobile(mobile string) bool {
 	return customerMobilePattern.MatchString(normalizeCustomerMobile(mobile))
+}
+
+func buildCustomerMobileHash(mobile string) string {
+	normalized := normalizeCustomerMobile(mobile)
+	if normalized == "" {
+		return ""
+	}
+	return fmt.Sprintf("%x", md5.Sum([]byte(normalized)))
 }
 
 const (
@@ -288,7 +298,14 @@ func (r *SysCustomerListRequest) Handle() func(db *gorm.DB) *gorm.DB {
 			db = db.Where("name LIKE ?", "%"+*r.Name+"%")
 		}
 		if r.Mobile != nil {
-			db = db.Where("mobile LIKE ?", "%"+*r.Mobile+"%")
+			mobile := normalizeCustomerMobile(*r.Mobile)
+			switch {
+			case mobile == "":
+			case isValidCustomerMobile(mobile):
+				db = db.Where("md5_mobile = ?", buildCustomerMobileHash(mobile))
+			default:
+				db = db.Where("mobile LIKE ?", "%"+mobile+"%")
+			}
 		}
 		if r.MoneyDemand != nil {
 			db = db.Where("money_demand = ?", *r.MoneyDemand)

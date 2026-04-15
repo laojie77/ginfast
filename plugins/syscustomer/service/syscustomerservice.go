@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -117,6 +118,78 @@ func appendSelectedField(fields []string, field string) []string {
 		}
 	}
 	return append(fields, field)
+}
+
+func (s *SysCustomerService) buildCustomerListBaseQuery(c *gin.Context, req models.SysCustomerListRequest, currentUserID int) *gorm.DB {
+	return app.DB().WithContext(c).
+		Model(&models.SysCustomer{}).
+		Scopes(
+			req.Handle(),
+			func(db *gorm.DB) *gorm.DB {
+				return req.ApplyListScene(db, currentUserID)
+			},
+			datascope.GetDataScopeByColumn(c, ""),
+			tenanthelper.TenantScope(c),
+		)
+}
+
+func buildCustomerListPageOrder(pageIDs []int) string {
+	if len(pageIDs) == 0 {
+		return ""
+	}
+
+	values := make([]string, 0, len(pageIDs))
+	for _, id := range pageIDs {
+		values = append(values, strconv.Itoa(id))
+	}
+
+	return fmt.Sprintf("FIELD(id, %s)", strings.Join(values, ","))
+}
+
+func (s *SysCustomerService) loadLatestCustomerTraces(c *gin.Context, customerIDs []int) (map[int][]traceModels.SysCustomerTraces, error) {
+	result := make(map[int][]traceModels.SysCustomerTraces, len(customerIDs))
+	if len(customerIDs) == 0 {
+		return result, nil
+	}
+
+	claims := common.GetClaims(c)
+	if claims == nil {
+		return result, nil
+	}
+
+	latestTraceIDQuery := app.DB().WithContext(c).
+		Model(&traceModels.SysCustomerTraces{}).
+		Select("MAX(id)").
+		Where("tenant_id = ?", claims.TenantID).
+		Where("customer_id IN ?", customerIDs).
+		Group("customer_id")
+
+	var traces []traceModels.SysCustomerTraces
+	if err := app.DB().WithContext(c).
+		Model(&traceModels.SysCustomerTraces{}).
+		Select("sys_customer_traces.*, sys_users.nick_name AS user_name, sys_users.avatar AS avatar").
+		Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
+		Where("sys_customer_traces.id IN (?)", latestTraceIDQuery).
+		Find(&traces).Error; err != nil {
+		return nil, err
+	}
+
+	for _, trace := range traces {
+		result[int(trace.CustomerID)] = []traceModels.SysCustomerTraces{trace}
+	}
+
+	return result, nil
+}
+
+func attachLatestCustomerTraces(list *models.SysCustomerList, traceMap map[int][]traceModels.SysCustomerTraces) {
+	if list == nil {
+		return
+	}
+
+	for i := range *list {
+		customer := &(*list)[i]
+		customer.CustomerTracesList = traceMap[customer.Id]
+	}
 }
 
 func (s *SysCustomerService) Create(c *gin.Context, req models.SysCustomerCreateRequest) (*models.SysCustomer, error) {
@@ -278,6 +351,49 @@ func (s *SysCustomerService) GetByID(c *gin.Context, id int) (*models.SysCustome
 }
 
 func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerList, int64, error) {
+	sysCustomerList := models.NewSysCustomerList()
+	currentUserID := int(common.GetCurrentUserID(c))
+
+	totalQuery := s.buildCustomerListBaseQuery(c, req, currentUserID)
+	var total int64
+	if err := totalQuery.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var pageIDs []int
+	pageQuery := s.buildCustomerListBaseQuery(c, req, currentUserID)
+	if err := pageQuery.
+		Scopes(req.ApplyDefaultOrder, req.Paginate()).
+		Pluck("id", &pageIDs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if len(pageIDs) == 0 {
+		return sysCustomerList, total, nil
+	}
+
+	dataQuery := app.DB().WithContext(c).
+		Model(&models.SysCustomer{}).
+		Where("id IN ?", pageIDs)
+
+	if orderExpr := buildCustomerListPageOrder(pageIDs); orderExpr != "" {
+		dataQuery = dataQuery.Order(orderExpr)
+	}
+
+	if err := dataQuery.Find(sysCustomerList).Error; err != nil {
+		return nil, 0, err
+	}
+
+	traceMap, err := s.loadLatestCustomerTraces(c, pageIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	attachLatestCustomerTraces(sysCustomerList, traceMap)
+
+	return sysCustomerList, total, nil
+}
+
+func (s *SysCustomerService) listLegacy(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerList, int64, error) {
 	sysCustomerList := models.NewSysCustomerList()
 	currentUserID := int(common.GetCurrentUserID(c))
 	scopes := []func(*gorm.DB) *gorm.DB{
