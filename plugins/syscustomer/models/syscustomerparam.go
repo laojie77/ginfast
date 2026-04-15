@@ -225,15 +225,13 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 		db = applyCustomerListDefaultIntFilter(db, "is_public", 0, r.IsPublic)
 		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
 		db = applyCustomerListDefaultIntFilter(db, "is_lock", 0, r.IsLock)
-		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "!=")
 	case CustomerListSceneMy:
 		// 我的客户场景本身不额外限制状态，只在下方补充当前登录人的 user_id。
 		db = applyCustomerListDefaultIntFilter(db, "is_public", 0, r.IsPublic)
 		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
 		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 0, r.IsReassign)
-		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "!=")
-		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Intention, "!=")
-		//db = applyCustomerListDefaultIntFilter(db, "is_read", 1, r.IsRead)
+		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "<")
+		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Intention, ">")
 	case CustomerListScenePublic:
 		//公共池客户
 		db = applyCustomerListDefaultIntFilter(db, "is_public", 1, r.IsPublic)
@@ -452,9 +450,9 @@ func (r *SysCustomerGetByIDRequest) Validate(c *gin.Context) error {
 type CustomerStatusTracesUpdateRequest struct {
 	models.Validator
 	CustomerID   int64  `form:"id" validate:"required" message:"客户ID不能为空"` // 客户
-	UserID       int    `form:"userId"`                                    // 操作用户
-	Data         string `form:"data" `                                     // 跟进内容
-	CustomerStar string `form:"customerStar"`                              // 星级
+	UserID       int    `form:"userId"`                                          // 操作用户
+	Data         string `form:"data" `                                           // 跟进内容
+	CustomerStar string `form:"customerStar"`                                    // 星级
 }
 
 // Validate 验证请求参数
