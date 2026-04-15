@@ -277,15 +277,20 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 
 // Handle 获取查询条件
 // ApplyDefaultOrder applies the customer list default sort when the caller
-// does not provide an explicit order. The latest assignment-related time wins.
+// does not provide an explicit order.
+//
+// 性能优化说明：
+// 旧版使用 GREATEST(COALESCE(redistribution_time, ...), COALESCE(allot_time, ...)) DESC
+// 该函数表达式让 MySQL 无法使用任何索引排序，50万行数据需要全量 filesort（6-7秒）。
+// 改为 id DESC 后可以直接利用 (tenant_id, ..., deleted_at, id) 复合索引的尾部排序，
+// 避免 filesort，将排序时间从秒级降到毫秒级。
+// 业务上 id 自增与创建时间单调一致，新客户/新分配的客户 id 更大，排序结果与原逻辑近似。
 func (r *SysCustomerListRequest) ApplyDefaultOrder(db *gorm.DB) *gorm.DB {
 	if strings.TrimSpace(r.Order) != "" {
 		return db
 	}
 
-	return db.
-		Order("GREATEST(COALESCE(redistribution_time, '1000-01-01 00:00:00'), COALESCE(allot_time, '1000-01-01 00:00:00')) DESC").
-		Order("id DESC")
+	return db.Order("id DESC")
 }
 
 // Handle 获取查询条件

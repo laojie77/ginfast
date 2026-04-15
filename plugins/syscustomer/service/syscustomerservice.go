@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -133,17 +132,58 @@ func (s *SysCustomerService) buildCustomerListBaseQuery(c *gin.Context, req mode
 		)
 }
 
-func buildCustomerListPageOrder(pageIDs []int) string {
-	if len(pageIDs) == 0 {
-		return ""
+func customerListSelectColumns() []string {
+	return []string{
+		"id",
+		"num",
+		"name",
+		"mobile",
+		"money_demand",
+		"channel_id",
+		"user_id",
+		"customer_star",
+		"status",
+		"intention",
+		"`from`",
+		"allot_time",
+		"dept_id",
+		"remarks",
+		"city",
+		"customer_comment",
+		"is_reassign",
+		"is_read",
+		"is_quit",
+		"is_repeat",
+		"is_sms",
+		"star_status",
+		"is_lock",
+	}
+}
+
+func reorderCustomerListByPageIDs(list *models.SysCustomerList, pageIDs []int) {
+	if list == nil || len(*list) <= 1 || len(pageIDs) <= 1 {
+		return
 	}
 
-	values := make([]string, 0, len(pageIDs))
-	for _, id := range pageIDs {
-		values = append(values, strconv.Itoa(id))
+	indexByID := make(map[int]int, len(pageIDs))
+	for idx, id := range pageIDs {
+		indexByID[id] = idx
 	}
 
-	return fmt.Sprintf("FIELD(id, %s)", strings.Join(values, ","))
+	ordered := make(models.SysCustomerList, len(pageIDs))
+	for _, customer := range *list {
+		if idx, ok := indexByID[customer.Id]; ok {
+			ordered[idx] = customer
+		}
+	}
+
+	filtered := ordered[:0]
+	for _, customer := range ordered {
+		if customer.Id > 0 {
+			filtered = append(filtered, customer)
+		}
+	}
+	*list = filtered
 }
 
 func (s *SysCustomerService) loadLatestCustomerTraces(c *gin.Context, customerIDs []int) (map[int][]traceModels.SysCustomerTraces, error) {
@@ -167,7 +207,7 @@ func (s *SysCustomerService) loadLatestCustomerTraces(c *gin.Context, customerID
 	var traces []traceModels.SysCustomerTraces
 	if err := app.DB().WithContext(c).
 		Model(&traceModels.SysCustomerTraces{}).
-		Select("sys_customer_traces.*, sys_users.nick_name AS user_name, sys_users.avatar AS avatar").
+		Select("sys_customer_traces.id, sys_customer_traces.customer_id, sys_customer_traces.data, sys_customer_traces.created_at, sys_users.nick_name AS user_name").
 		Joins("LEFT JOIN sys_users ON sys_customer_traces.user_id = sys_users.id").
 		Where("sys_customer_traces.id IN (?)", latestTraceIDQuery).
 		Find(&traces).Error; err != nil {
@@ -374,15 +414,13 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 
 	dataQuery := app.DB().WithContext(c).
 		Model(&models.SysCustomer{}).
+		Select(customerListSelectColumns()).
 		Where("id IN ?", pageIDs)
-
-	if orderExpr := buildCustomerListPageOrder(pageIDs); orderExpr != "" {
-		dataQuery = dataQuery.Order(orderExpr)
-	}
 
 	if err := dataQuery.Find(sysCustomerList).Error; err != nil {
 		return nil, 0, err
 	}
+	reorderCustomerListByPageIDs(sysCustomerList, pageIDs)
 
 	traceMap, err := s.loadLatestCustomerTraces(c, pageIDs)
 	if err != nil {
