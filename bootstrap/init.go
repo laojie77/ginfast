@@ -74,6 +74,7 @@ func init() {
 
 	// 初始化Response 导出
 	sysCustomerService.StartCustomerExportDispatcher()
+	sysCustomerService.StartCustomerImportDispatcher()
 	app.Response = response.NewResponseHandler()
 }
 

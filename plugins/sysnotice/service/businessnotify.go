@@ -13,6 +13,8 @@ const (
 	NoticeBusinessSceneExportFailed   = "export_failed"
 	NoticeBusinessSceneExportQueue    = "export_queue"
 	NoticeBusinessSceneCustomerAssign = "customer_assigned"
+	NoticeBusinessSceneImportProgress = "customer_import_progress"
+	NoticeBusinessSceneImportResult   = "customer_import_result"
 
 	NoticeBusinessActionKindRoute    = "route"
 	NoticeBusinessActionKindURL      = "url"
@@ -176,6 +178,48 @@ func (s *NoticeBusinessService) NotifyCustomerAssigned(
 				OpenMode: NoticeBusinessActionOpenModeSelf,
 			},
 			Extra: extra,
+		},
+	})
+}
+
+func (s *NoticeBusinessService) NotifyCustomerImportProgress(
+	ctx context.Context,
+	tenantID, userID uint,
+	title, content string,
+	extra map[string]interface{},
+) error {
+	return s.NotifyUsers(ctx, NoticeBusinessNotifyRequest{
+		TenantID: tenantID,
+		UserIDs:  []uint{userID},
+		Payload: NoticeBusinessPayload{
+			Scene:   NoticeBusinessSceneImportProgress,
+			Title:   title,
+			Content: content,
+			Level:   "info",
+			Extra:   extra,
+		},
+	})
+}
+
+func (s *NoticeBusinessService) NotifyCustomerImportResult(
+	ctx context.Context,
+	tenantID, userID uint,
+	title, content, level string,
+	extra map[string]interface{},
+) error {
+	level = strings.TrimSpace(level)
+	if level == "" {
+		level = "info"
+	}
+	return s.NotifyUsers(ctx, NoticeBusinessNotifyRequest{
+		TenantID: tenantID,
+		UserIDs:  []uint{userID},
+		Payload: NoticeBusinessPayload{
+			Scene:   NoticeBusinessSceneImportResult,
+			Title:   title,
+			Content: content,
+			Level:   level,
+			Extra:   extra,
 		},
 	})
 }

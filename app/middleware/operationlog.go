@@ -3,13 +3,13 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"gin-fast/app/global/app"
-	"gin-fast/app/models"
-	"gin-fast/app/utils/common"
 	"io"
 	"strings"
 	"time"
+
+	"gin-fast/app/global/app"
+	"gin-fast/app/models"
+	"gin-fast/app/utils/common"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -28,18 +28,22 @@ func OperationLogMiddleware() gin.HandlerFunc {
 
 		// 复制请求体用于记录
 		var requestBody []byte
-		if c.Request.Body != nil {
+		if c.Request.Body != nil && !isMultipartRequest(c) {
 			requestBody, _ = io.ReadAll(c.Request.Body)
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 		}
-
-		// 创建自定义的ResponseWriter来捕获响应
-		writer := &responseWriter{body: bytes.NewBuffer(nil), ResponseWriter: c.Writer}
+		//创建自定义的ResponseWriter来捕获响应
+		writer := &responseWriter{
+			body:           bytes.NewBuffer(nil),
+			ResponseWriter: c.Writer,
+		}
 		c.Writer = writer
-
+		//记录操作日志
 		defer func() {
-			// 记录操作日志
-			go recordOperationLog(c, startTime, requestBody, writer.body.Bytes())
+			log := buildOperationLog(c, startTime, requestBody, writer.body.Bytes())
+			if log != nil {
+				go saveOperationLog(log)
+			}
 		}()
 
 		c.Next()
@@ -82,41 +86,34 @@ func shouldSkipLog(c *gin.Context) bool {
 }
 
 // recordOperationLog 记录操作日志
-func recordOperationLog(c *gin.Context, startTime time.Time, requestBody, responseBody []byte) {
-	duration := time.Since(startTime).Milliseconds()
+func buildOperationLog(c *gin.Context, startTime time.Time, requestBody, responseBody []byte) *models.SysOperationLog {
+	if c == nil || c.Request == nil {
+		return nil
+	}
 
+	duration := time.Since(startTime).Milliseconds()
 	// 获取用户信息
 	var userID uint
 	var username string
 	var tenantID uint
 	operationType := getOperationType(c)
-
 	// 尝试从JWT token获取用户信息
 	claims := common.GetClaims(c)
-	fmt.Printf("Claims 内容: %+v\n", claims)
 	if claims != nil {
 		userID = claims.UserID
 		username = claims.Username
 		tenantID = claims.TenantID
-	} else {
-		// 如果是登录操作，尝试从请求体中获取用户名
-		if c.Request.URL.Path == "/api/login" && c.Request.Method == "POST" {
-			// 解析登录请求体获取用户名
-			var loginReq struct {
-				Username string `json:"username"`
-			}
-			if len(requestBody) > 0 {
-				if err := json.Unmarshal(requestBody, &loginReq); err == nil && loginReq.Username != "" {
-					username = loginReq.Username
-					// 标记为登录操作
-					operationType = models.OperationLogin
-				}
-			}
+	} else if c.Request.URL.Path == "/api/login" && c.Request.Method == "POST" && len(requestBody) > 0 {
+		var loginReq struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(requestBody, &loginReq); err == nil && loginReq.Username != "" {
+			username = loginReq.Username
+			operationType = models.OperationLogin
 		}
 	}
-
 	// 构建操作日志
-	log := &models.SysOperationLog{
+	return &models.SysOperationLog{
 		UserID:      userID,
 		Username:    username,
 		Module:      getOperationModule(c),
@@ -125,24 +122,26 @@ func recordOperationLog(c *gin.Context, startTime time.Time, requestBody, respon
 		Path:        c.Request.URL.Path,
 		IP:          c.ClientIP(),
 		UserAgent:   c.Request.UserAgent(),
-		RequestData: sanitizeRequestData(requestBody),
-		//ResponseData: sanitizeResponseData(responseBody),
-		StatusCode: c.Writer.Status(),
-		Duration:   duration,
-		ErrorMsg:   getErrorMessage(c, responseBody),
-		Location:   getLocationByIP(c.ClientIP()),
-		TenantID:   tenantID,
+		RequestData: sanitizeRequestData(c, requestBody),
+		StatusCode:  c.Writer.Status(),
+		Duration:    duration,
+		ErrorMsg:    getErrorMessage(c, responseBody),
+		Location:    getLocationByIP(c.ClientIP()),
+		TenantID:    tenantID,
 	}
-
-	// 异步保存日志
-	go func() {
-		if err := app.DB().Create(log).Error; err != nil {
-			app.ZapLog.Error("记录操作日志失败", zap.Error(err))
-		}
-	}()
 }
 
-// getOperationModule 获取操作模块
+func saveOperationLog(log *models.SysOperationLog) {
+	if log == nil {
+		return
+	}
+
+	if err := app.DB().Create(log).Error; err != nil {
+		app.ZapLog.Error("记录操作日志失败", zap.Error(err))
+	}
+}
+
+// getOperation 获取操作类型
 func getOperationModule(c *gin.Context) string {
 	path := c.Request.URL.Path
 	if strings.Contains(path, "/users") {
@@ -167,10 +166,16 @@ func getOperationModule(c *gin.Context) string {
 	return "其他"
 }
 
-// getOperationType 获取操作类型
 func getOperationType(c *gin.Context) string {
-	method := c.Request.Method
-	switch method {
+	path := strings.ToLower(c.Request.URL.Path)
+	if strings.Contains(path, "/import") {
+		return models.OperationImport
+	}
+	if strings.Contains(path, "/export") {
+		return models.OperationExport
+	}
+
+	switch c.Request.Method {
 	case "POST":
 		return models.OperationCreate
 	case "PUT", "PATCH":
@@ -184,27 +189,27 @@ func getOperationType(c *gin.Context) string {
 	}
 }
 
-// getErrorMessage 获取错误信息
 func getErrorMessage(c *gin.Context, responseBody []byte) string {
-	if c.Writer.Status() >= 400 {
-		// 首先尝试从上下文中获取错误信息
-		if err, exists := c.Get("error"); exists {
-			return err.(error).Error()
+	if c.Writer.Status() < 400 {
+		return ""
+	}
+
+	if err, exists := c.Get("error"); exists {
+		if target, ok := err.(error); ok && target != nil {
+			return target.Error()
 		}
-		// 如果上下文中没有错误信息，尝试解析响应体
-		if len(responseBody) > 0 {
-			// 尝试解析JSON响应体
-			var response map[string]interface{}
-			if err := json.Unmarshal(responseBody, &response); err == nil {
-				// 根据项目中的响应格式获取错误信息（使用message字段）
-				if msg, ok := response["message"].(string); ok && msg != "" {
-					return msg
-				}
+	}
+
+	if len(responseBody) > 0 {
+		var response map[string]interface{}
+		if err := json.Unmarshal(responseBody, &response); err == nil {
+			if msg, ok := response["message"].(string); ok && msg != "" {
+				return msg
 			}
 		}
-		return "请求处理失败"
 	}
-	return ""
+
+	return "请求处理失败"
 }
 
 // getLocationByIP 根据IP获取地理位置（简化实现）
@@ -214,17 +219,28 @@ func getLocationByIP(ip string) string {
 	return ""
 }
 
+func isMultipartRequest(c *gin.Context) bool {
+	if c == nil || c.Request == nil {
+		return false
+	}
+
+	contentType := strings.ToLower(strings.TrimSpace(c.Request.Header.Get("Content-Type")))
+	return strings.HasPrefix(contentType, "multipart/form-data")
+}
+
 // sanitizeRequestData 对请求数据进行脱敏处理
-func sanitizeRequestData(data []byte) string {
+func sanitizeRequestData(c *gin.Context, data []byte) string {
+	if isMultipartRequest(c) {
+		return sanitizeMultipartRequestData(c)
+	}
+
 	if len(data) == 0 {
 		return ""
 	}
 
-	// 如果是JSON数据，尝试脱敏敏感字段
 	if json.Valid(data) {
 		var jsonData map[string]interface{}
 		if err := json.Unmarshal(data, &jsonData); err == nil {
-			// 脱敏密码字段
 			if _, exists := jsonData["password"]; exists {
 				jsonData["password"] = "***"
 			}
@@ -235,29 +251,88 @@ func sanitizeRequestData(data []byte) string {
 				jsonData["newPassword"] = "***"
 			}
 
-			// 重新序列化
 			if sanitized, err := json.Marshal(jsonData); err == nil {
 				return string(sanitized)
 			}
 		}
 	}
 
-	// 如果不是JSON，直接返回原始数据（限制长度）
-	if len(data) > 10000 {
-		return string(data[:10000]) + "...(truncated)"
-	}
-	return string(data)
+	return truncateAndNormalizeText(data, 10000)
 }
 
-// sanitizeResponseData 对响应数据进行脱敏处理
 func sanitizeResponseData(data []byte) string {
 	if len(data) == 0 {
 		return ""
 	}
 
-	// 限制响应数据长度
 	if len(data) > 5000 {
-		return string(data[:5000]) + "...(truncated)"
+		return truncateAndNormalizeText(data, 5000)
 	}
-	return string(data)
+	return truncateAndNormalizeText(data, 0)
+}
+
+func sanitizeMultipartRequestData(c *gin.Context) string {
+	summary := struct {
+		ContentType string                   `json:"contentType"`
+		Fields      map[string][]string      `json:"fields,omitempty"`
+		Files       []map[string]interface{} `json:"files,omitempty"`
+	}{
+		ContentType: "multipart/form-data",
+	}
+
+	if c == nil || c.Request == nil || c.Request.MultipartForm == nil {
+		if raw, err := json.Marshal(summary); err == nil {
+			return string(raw)
+		}
+		return "{\"contentType\":\"multipart/form-data\"}"
+	}
+
+	form := c.Request.MultipartForm
+	if len(form.Value) > 0 {
+		summary.Fields = make(map[string][]string, len(form.Value))
+		for key, values := range form.Value {
+			items := make([]string, 0, len(values))
+			for _, value := range values {
+				items = append(items, truncateAndNormalizeText([]byte(value), 500))
+			}
+			summary.Fields[key] = items
+		}
+	}
+
+	if len(form.File) > 0 {
+		files := make([]map[string]interface{}, 0)
+		for field, headers := range form.File {
+			for _, header := range headers {
+				files = append(files, map[string]interface{}{
+					"field":    field,
+					"filename": header.Filename,
+					"size":     header.Size,
+				})
+			}
+		}
+		summary.Files = files
+	}
+
+	if raw, err := json.Marshal(summary); err == nil {
+		return string(raw)
+	}
+	return "{\"contentType\":\"multipart/form-data\"}"
+}
+
+func truncateAndNormalizeText(data []byte, limit int) string {
+	if len(data) == 0 {
+		return ""
+	}
+
+	truncated := false
+	if limit > 0 && len(data) > limit {
+		data = data[:limit]
+		truncated = true
+	}
+
+	text := strings.ToValidUTF8(string(data), "?")
+	if truncated {
+		text += "...(truncated)"
+	}
+	return text
 }

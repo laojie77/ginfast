@@ -222,7 +222,8 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
 		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 0, r.IsReassign)
 		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "!=")
-		db = applyCustomerListDefaultIntFilter(db, "is_read", 1, r.IsRead)
+		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Intention, "!=")
+		//db = applyCustomerListDefaultIntFilter(db, "is_read", 1, r.IsRead)
 	case CustomerListScenePublic:
 		//公共池客户
 		db = applyCustomerListDefaultIntFilter(db, "is_public", 1, r.IsPublic)
@@ -247,6 +248,8 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
 		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 0, r.IsReassign)
 		db = applyCustomerListDefaultIntFilter(db, "is_read", 0, r.IsRead)
+		db = applyCustomerListDefaultIntFilter(db, "intention", 0, r.Intention)
+		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Intention)
 	}
 
 	if r.UserID != nil || userID <= 0 {
