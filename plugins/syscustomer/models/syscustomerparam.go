@@ -230,6 +230,7 @@ func (r *SysCustomerListRequest) ApplyListScene(db *gorm.DB, userID int) *gorm.D
 		db = applyCustomerListDefaultIntFilter(db, "is_public", 0, r.IsPublic)
 		db = applyCustomerListDefaultIntFilter(db, "is_exchange", 0, r.IsExchange)
 		db = applyCustomerListDefaultIntFilter(db, "is_reassign", 0, r.IsReassign)
+		
 		db = applyCustomerListDefaultIntFilter(db, "intention", 3, r.Intention, "<")
 		db = applyCustomerListDefaultIntFilter(db, "status", 0, r.Intention, ">")
 	case CustomerListScenePublic:

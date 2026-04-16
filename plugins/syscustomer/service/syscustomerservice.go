@@ -1,9 +1,11 @@
 package service
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,8 @@ import (
 type SysCustomerService struct{}
 
 const customerDefaultFrom = 3
+const customerListTotalCacheTTL = 15 * time.Second
+const customerListTotalCachePrefix = "syscustomer:list:total:"
 
 func NewSysCustomerService() *SysCustomerService {
 	return &SysCustomerService{}
@@ -130,6 +134,125 @@ func (s *SysCustomerService) buildCustomerListBaseQuery(c *gin.Context, req mode
 			datascope.GetDataScopeByColumn(c, ""),
 			tenanthelper.TenantScope(c),
 		)
+}
+
+func customerListTotalCacheKey(c *gin.Context, req models.SysCustomerListRequest, currentUserID int) string {
+	payload := struct {
+		TenantID        uint       `json:"tenantId"`
+		CurrentUserID   int        `json:"currentUserId"`
+		Scene           string     `json:"scene"`
+		Num             *string    `json:"num,omitempty"`
+		Name            *string    `json:"name,omitempty"`
+		Mobile          *string    `json:"mobile,omitempty"`
+		MoneyDemand     *int       `json:"moneyDemand,omitempty"`
+		ChannelID       *int       `json:"channelId,omitempty"`
+		UserID          *int       `json:"userId,omitempty"`
+		CustomerStar    *int       `json:"customerStar,omitempty"`
+		Status          *int       `json:"status,omitempty"`
+		Intention       *int       `json:"intention,omitempty"`
+		SinglePieceType *int       `json:"singlePieceType,omitempty"`
+		AllotTime       *time.Time `json:"allotTime,omitempty"`
+		DeptID          *int       `json:"deptId,omitempty"`
+		City            *string    `json:"city,omitempty"`
+		IsReassign      *int       `json:"isReassign,omitempty"`
+		IsPublic        *int       `json:"isPublic,omitempty"`
+		IsQuit          *int       `json:"isQuit,omitempty"`
+		IsRepeat        *int       `json:"isRepeat,omitempty"`
+		StarStatus      *int       `json:"starStatus,omitempty"`
+		IsExchange      *int       `json:"isExchange,omitempty"`
+		IsLock          *int       `json:"isLock,omitempty"`
+		IsRead          *int       `json:"isRead,omitempty"`
+	}{
+		TenantID:        common.GetCurrentTenantID(c),
+		CurrentUserID:   currentUserID,
+		Scene:           strings.ToLower(strings.TrimSpace(derefString(req.Scene))),
+		Num:             req.Num,
+		Name:            req.Name,
+		Mobile:          req.Mobile,
+		MoneyDemand:     req.MoneyDemand,
+		ChannelID:       req.ChannelId,
+		UserID:          req.UserID,
+		CustomerStar:    req.CustomerStar,
+		Status:          req.Status,
+		Intention:       req.Intention,
+		SinglePieceType: req.SinglePieceType,
+		AllotTime:       req.AllotTime,
+		DeptID:          req.DeptID,
+		City:            req.City,
+		IsReassign:      req.IsReassign,
+		IsPublic:        req.IsPublic,
+		IsQuit:          req.IsQuit,
+		IsRepeat:        req.IsRepeat,
+		StarStatus:      req.StarStatus,
+		IsExchange:      req.IsExchange,
+		IsLock:          req.IsLock,
+		IsRead:          req.IsRead,
+	}
+
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+
+	return customerListTotalCachePrefix + fmt.Sprintf("%x", md5.Sum(raw))
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func getCachedCustomerListTotal(ctx context.Context, cacheKey string) (int64, bool) {
+	if cacheKey == "" {
+		return 0, false
+	}
+
+	raw, err := app.Cache.Get(ctx, cacheKey)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return 0, false
+	}
+
+	total, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || total < 0 {
+		return 0, false
+	}
+
+	return total, true
+}
+
+func cacheCustomerListTotal(ctx context.Context, cacheKey string, total int64) {
+	if cacheKey == "" || total < 0 {
+		return
+	}
+
+	_ = app.Cache.Set(ctx, cacheKey, strconv.FormatInt(total, 10), customerListTotalCacheTTL)
+}
+
+func resolveExactCustomerListTotal(req models.SysCustomerListRequest, pageIDs []int) (int64, bool) {
+	if req.PageNum <= 0 || req.PageSize <= 0 {
+		return 0, false
+	}
+
+	pageSize := req.PageSize
+	pageLen := len(pageIDs)
+	offset := (req.PageNum - 1) * pageSize
+
+	if req.PageNum == 1 && pageLen == 0 {
+		return 0, true
+	}
+
+	if pageLen > 0 && pageLen < pageSize {
+		return int64(offset + pageLen), true
+	}
+
+	return 0, false
+}
+
+type customerListCountResult struct {
+	total int64
+	err   error
 }
 
 func customerListSelectColumns() []string {
@@ -393,12 +516,9 @@ func (s *SysCustomerService) GetByID(c *gin.Context, id int) (*models.SysCustome
 func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequest) (*models.SysCustomerList, int64, error) {
 	sysCustomerList := models.NewSysCustomerList()
 	currentUserID := int(common.GetCurrentUserID(c))
-
-	totalQuery := s.buildCustomerListBaseQuery(c, req, currentUserID)
-	var total int64
-	if err := totalQuery.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
+	cacheCtx := context.Background()
+	totalCacheKey := customerListTotalCacheKey(c, req, currentUserID)
+	total, totalFromCache := getCachedCustomerListTotal(cacheCtx, totalCacheKey)
 
 	var pageIDs []int
 	pageQuery := s.buildCustomerListBaseQuery(c, req, currentUserID)
@@ -408,7 +528,34 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 		return nil, 0, err
 	}
 
+	if !totalFromCache {
+		if exactTotal, ok := resolveExactCustomerListTotal(req, pageIDs); ok {
+			total = exactTotal
+			totalFromCache = true
+			cacheCustomerListTotal(cacheCtx, totalCacheKey, total)
+		}
+	}
+
+	var countResultCh chan customerListCountResult
+	if !totalFromCache {
+		countResultCh = make(chan customerListCountResult, 1)
+		countContext := c.Copy()
+		go func() {
+			var counted int64
+			err := s.buildCustomerListBaseQuery(countContext, req, currentUserID).Count(&counted).Error
+			countResultCh <- customerListCountResult{total: counted, err: err}
+		}()
+	}
+
 	if len(pageIDs) == 0 {
+		if countResultCh != nil {
+			result := <-countResultCh
+			if result.err != nil {
+				return nil, 0, result.err
+			}
+			total = result.total
+			cacheCustomerListTotal(cacheCtx, totalCacheKey, total)
+		}
 		return sysCustomerList, total, nil
 	}
 
@@ -427,6 +574,15 @@ func (s *SysCustomerService) List(c *gin.Context, req models.SysCustomerListRequ
 		return nil, 0, err
 	}
 	attachLatestCustomerTraces(sysCustomerList, traceMap)
+
+	if countResultCh != nil {
+		result := <-countResultCh
+		if result.err != nil {
+			return nil, 0, result.err
+		}
+		total = result.total
+		cacheCustomerListTotal(cacheCtx, totalCacheKey, total)
+	}
 
 	return sysCustomerList, total, nil
 }
